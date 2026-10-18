@@ -46,6 +46,11 @@
     "vite": "^8.3.0"
   },
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
   }
 }
