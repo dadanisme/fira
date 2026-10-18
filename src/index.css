@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Components use them through the Tailwind theme below
+ * (bg-surface, text-fg-muted, border-line, ...), never raw colors.
+ * Dark mode: <html data-theme="dark">, resolved from the OS or the stored choice (src/lib/theme.ts).
+ */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --sidebar: #f7f7f8;
+  --surface: #ffffff;
+  --sunken: #f4f4f5;
+  --hover: rgb(0 0 0 / 0.045);
+  --active: rgb(0 0 0 / 0.08);
+  --line: #e7e7ea;
+  --line-strong: #d4d4d8;
+  --fg: #18181b;
+  --fg-muted: #5f5f6a;
+  --fg-faint: #9a9aa3;
+  --accent: #5b5bd6;
+  --accent-hover: #4f4fc4;
+  --accent-fg: #ffffff;
+  --accent-soft: rgb(91 91 214 / 0.12);
+  --danger: #d93f3f;
+  --success: #2f9e5f;
+  --warning: #d48a14;
+  --ring: rgb(91 91 214 / 0.45);
+  --popover-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 8px 24px -6px rgb(0 0 0 / 0.16);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+
+  --prio-urgent: #e5484d;
+  --prio-high: #f76b15;
+  --prio-medium: #d4a20a;
+  --prio-low: #5b8def;
+  --prio-none: var(--fg-faint);
+
+  --label-gray-bg: #eeeef0;   --label-gray-fg: #55555e;
+  --label-red-bg: #fde8e8;    --label-red-fg: #b4292e;
+  --label-orange-bg: #feecdc; --label-orange-fg: #b4520f;
+  --label-yellow-bg: #fcf3cf; --label-yellow-fg: #8a6a00;
+  --label-green-bg: #e1f5e8;  --label-green-fg: #23794a;
+  --label-teal-bg: #dcf4f1;   --label-teal-fg: #127a70;
+  --label-blue-bg: #e2edfd;   --label-blue-fg: #2b5fb8;
+  --label-purple-bg: #ece8fd; --label-purple-fg: #5b42c2;
+  --label-pink-bg: #fce7f3;   --label-pink-fg: #b02a72;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #161618;
+  --sidebar: #1b1b1e;
+  --surface: #1f1f22;
+  --sunken: #121214;
+  --hover: rgb(255 255 255 / 0.05);
+  --active: rgb(255 255 255 / 0.09);
+  --line: #2b2b30;
+  --line-strong: #3a3a40;
+  --fg: #ececee;
+  --fg-muted: #a0a0aa;
+  --fg-faint: #6c6c76;
+  --accent: #7b7bf0;
+  --accent-hover: #8e8ef3;
+  --accent-fg: #ffffff;
+  --accent-soft: rgb(123 123 240 / 0.18);
+  --danger: #f06262;
+  --success: #4cc283;
+  --warning: #e8a83a;
+  --ring: rgb(123 123 240 / 0.5);
+  --popover-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 8px 24px -6px rgb(0 0 0 / 0.6);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+
+  --label-gray-bg: #2e2e33;   --label-gray-fg: #b4b4bd;
+  --label-red-bg: #3d1f21;    --label-red-fg: #f4a3a6;
+  --label-orange-bg: #3d2817; --label-orange-fg: #f6b37f;
+  --label-yellow-bg: #3a3214; --label-yellow-fg: #ead27a;
+  --label-green-bg: #1b3326;  --label-green-fg: #8fd8ac;
+  --label-teal-bg: #163432;   --label-teal-fg: #84d8cd;
+  --label-blue-bg: #1c2a42;   --label-blue-fg: #9dbdf5;
+  --label-purple-bg: #2a2445; --label-purple-fg: #bcaef7;
+  --label-pink-bg: #3c1f31;   --label-pink-fg: #f3a5cf;
+}
+
+@theme inline {
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-bg: var(--bg);
+  --color-sidebar: var(--sidebar);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-ring: var(--ring);
+  --color-prio-urgent: var(--prio-urgent);
+  --color-prio-high: var(--prio-high);
+  --color-prio-medium: var(--prio-medium);
+  --color-prio-low: var(--prio-low);
+  --color-prio-none: var(--prio-none);
+
+  --shadow-popover: var(--popover-shadow);
+  --shadow-card: var(--card-shadow);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+}

@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Owner email is hardcoded: keep in sync with firestore.rules and OWNER_EMAIL.
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'huntercitation@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    // Card attachments: attachments/{cardId}/{attachmentId}/{name}
+    match /attachments/{path=**} {
+      allow read, write: if isOwner();
+    }
+
+    // Images embedded in pages: pages/{pageId}/{fileId}-{name}
+    match /pages/{path=**} {
+      allow read, write: if isOwner();
+    }
+  }
+}

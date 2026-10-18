@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Owner email is hardcoded: rules cannot read env vars. Keep in sync with
+    // OWNER_EMAIL / VITE_OWNER_EMAIL (and storage.rules).
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == 'huntercitation@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    // API tokens are created and revoked only by the server (Admin SDK bypasses rules).
+    match /tokens/{tokenId} {
+      allow read: if isOwner();
+    }
+
+    // Everything else (any depth). Rules OR together, so `tokens` is excluded here.
+    match /{collectionId}/{document=**} {
+      allow read, write: if isOwner() && collectionId != 'tokens';
+    }
+  }
+}
