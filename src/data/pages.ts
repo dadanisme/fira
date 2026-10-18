@@ -11,12 +11,14 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useMemo } from 'react';
-import type { Page, PageVersion } from '@shared/types';
+import type { Card, Page, PageVersion } from '@shared/types';
 import { startsVersionSession, subtreeIds } from '@shared/pages';
-import { db } from '../lib/firebase';
+import { randomId } from '@shared/ids';
+import { db, storage } from '../lib/firebase';
 import { currentActor } from './actor';
-import { newDoc, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
+import { cardsCol, newDoc, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
 import { useLiveQuery, useLiveDoc, type Live } from './live';
 import { commitInChunks } from './writes';
 
@@ -30,6 +32,20 @@ export function usePages(): Live<Page[]> {
 export function usePage(id: string | undefined): Live<Page | null> {
   const ref = useMemo(() => (id ? doc(pagesCol, id) : null), [id]);
   return useLiveDoc(ref);
+}
+
+/** The card a work page belongs to (`page.cardId`), for the link back to it. */
+export function useLinkedCard(cardId: string | undefined): Live<Card | null> {
+  const ref = useMemo(() => (cardId ? doc(cardsCol, cardId) : null), [cardId]);
+  return useLiveDoc(ref);
+}
+
+/** Uploads an image embedded in a page to `pages/{pageId}/{fileId}-{name}`; resolves to its download URL. */
+export async function uploadPageImage(pageId: string, file: File): Promise<string> {
+  const name = file.name.replace(/[^\w.-]+/g, '_') || 'image';
+  const ref = storageRef(storage, `pages/${pageId}/${randomId(10)}-${name}`);
+  await uploadBytes(ref, file, { contentType: file.type || undefined });
+  return getDownloadURL(ref);
 }
 
 /** Version snapshots of a page, newest first. */
@@ -77,6 +93,18 @@ export function createPage(input: NewPage): string {
 /** A new page copying a template's title, icon and content. */
 export function createPageFromTemplate(template: Page, input: Omit<NewPage, 'content' | 'isTemplate'>): string {
   return createPage({ title: template.title, icon: template.icon, ...input, content: template.content });
+}
+
+/** A copy of a page (title, icon, content, template flag) placed right after it; its subpages are not copied. */
+export function duplicatePage(page: Page, rank: string): string {
+  return createPage({
+    title: page.title ? `${page.title} (copy)` : '',
+    icon: page.icon,
+    parentId: page.parentId,
+    rank,
+    content: page.content,
+    isTemplate: page.isTemplate,
+  });
 }
 
 /**

@@ -29,7 +29,8 @@ function app(): App {
 export function firestore(): Firestore {
   if (!firestoreInstance) {
     firestoreInstance = getFirestore(app());
-    firestoreInstance.settings({ preferRest: true, ignoreUndefinedProperties: true });
+    // The emulator only grants admin access over gRPC (REST requests are checked against the rules).
+    firestoreInstance.settings({ preferRest: !process.env.FIRESTORE_EMULATOR_HOST, ignoreUndefinedProperties: true });
   }
   return firestoreInstance;
 }

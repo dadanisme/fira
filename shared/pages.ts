@@ -32,3 +32,34 @@ export function subtreeIds(pages: readonly Pick<Page, 'id' | 'parentId'>[], root
   visit(rootId);
   return out;
 }
+
+/** Pages to mark trashed when trashing `rootId`: the root plus its not-yet-trashed descendants. */
+export function trashIds(pages: readonly Pick<Page, 'id' | 'parentId' | 'trashed'>[], rootId: string): string[] {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  return subtreeIds(pages, rootId).filter((id) => id === rootId || !byId.get(id)?.trashed);
+}
+
+/**
+ * What restoring `page` touches: the page plus the descendants trashed with it (same
+ * `trashedAt`), and whether the page must move to the root because its parent is
+ * still trashed or gone.
+ */
+export function restorePlan(
+  pages: readonly Pick<Page, 'id' | 'parentId' | 'trashed' | 'trashedAt'>[],
+  page: Pick<Page, 'id' | 'parentId' | 'trashedAt'>,
+): { ids: string[]; orphaned: boolean } {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const ids = subtreeIds(pages, page.id).filter((id) => id === page.id || byId.get(id)?.trashedAt === page.trashedAt);
+  const parent = page.parentId ? byId.get(page.parentId) : undefined;
+  return { ids, orphaned: page.parentId !== null && (!parent || parent.trashed) };
+}
+
+/** Whether moving `pageId` under `parentId` would create a cycle (parent is the page or a descendant). */
+export function wouldCycle(pages: readonly Pick<Page, 'id' | 'parentId'>[], pageId: string, parentId: string | null): boolean {
+  return parentId !== null && subtreeIds(pages, pageId).includes(parentId);
+}
+
+/** Default title of a card's work page, e.g. `NI-12 Fix login`. */
+export function workPageTitle(card: { key: string; title: string }): string {
+  return `${card.key} ${card.title}`;
+}

@@ -4,11 +4,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export class HttpError extends Error {
   readonly status: number;
   readonly code: string;
+  /** Extra members of the `error` object (e.g. `current` for version conflicts). */
+  readonly details?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details?: Record<string, unknown>) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -17,7 +20,11 @@ export const unauthorized = (message = 'Missing or invalid credentials') => new 
 export const forbidden = (message = 'Not allowed') => new HttpError(403, 'forbidden', message);
 export const notFound = (message = 'Not found') => new HttpError(404, 'not_found', message);
 export const conflict = (message: string) => new HttpError(409, 'conflict', message);
-export const unprocessable = (message: string) => new HttpError(422, 'unprocessable', message);
+export const unprocessable = (message: string, details?: Record<string, unknown>) =>
+  new HttpError(422, 'unprocessable', message, details);
+/** 409 for a stale `version` / `descriptionVersion`; `current` is the resource as it is now. */
+export const versionConflict = (message: string, current: unknown) =>
+  new HttpError(409, 'version_conflict', message, { current });
 
 /** A response with an explicit status. Handlers return plain values for 200 JSON. */
 export class Reply {
@@ -42,7 +49,7 @@ export function send(res: VercelResponse, result: unknown) {
 export function sendError(res: VercelResponse, err: unknown) {
   const error = err instanceof HttpError ? err : new HttpError(500, 'internal', 'Internal error');
   if (!(err instanceof HttpError)) console.error(err);
-  res.status(error.status).json({ error: { code: error.code, message: error.message } });
+  res.status(error.status).json({ error: { ...error.details, code: error.code, message: error.message } });
 }
 
 /** The parsed JSON object body (Vercel parses `application/json`); `{}` when empty. */

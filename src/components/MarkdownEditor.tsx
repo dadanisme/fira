@@ -33,6 +33,26 @@ export interface MarkdownEditorProps {
   uploadImage?(file: File): Promise<string>;
   className?: string;
   ref?: Ref<MarkdownEditorHandle>;
+
+  // Inline comments (docs). All optional; omit them and the editor has no comment UI.
+  /** Threads to highlight, located by searching quote + context in the document text. */
+  comments?: readonly CommentAnchor[];
+  /** Highlighted more strongly. */
+  activeCommentId?: string | null;
+  /** Clicking a highlight. */
+  onCommentClick?(id: string): void;
+  /** Vertical offset (px from the editor top) of each located thread; orphaned threads are absent. */
+  onCommentPositions?(tops: Record<string, number>): void;
+  /** Shows "Comment" in the selection bubble menu; receives the selected quote with ≤ 32 chars of context. */
+  onComment?(anchor: Omit<CommentAnchor, 'id'>): void;
+}
+
+/** A comment thread's anchor in the document's plain text. */
+export interface CommentAnchor {
+  id: string;
+  quote: string;
+  prefix: string;
+  suffix: string;
 }
 
 export interface MarkdownEditorHandle {
@@ -46,8 +66,14 @@ export interface MarkdownViewProps {
   className?: string;
 }
 
-const Editor = lazy(() => import('./markdown/MarkdownEditorImpl'));
+const loadEditor = () => import('./markdown/MarkdownEditorImpl');
+const Editor = lazy(loadEditor);
 const View = lazy(() => import('./markdown/MarkdownViewImpl'));
+
+/** Starts loading the editor chunk (e.g. on hover of a link to a page), so it opens instantly. */
+export function preloadMarkdownEditor(): void {
+  void loadEditor();
+}
 
 export function MarkdownEditor(props: MarkdownEditorProps) {
   return (
