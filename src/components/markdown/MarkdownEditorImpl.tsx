@@ -6,9 +6,10 @@ import type { EditorView } from '@tiptap/pm/view';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Dropcursor, Gapcursor, Placeholder, UndoRedo } from '@tiptap/extensions';
 import { cx } from '../../lib/cx';
-import type { MarkdownEditorProps } from '../MarkdownEditor';
+import type { MarkdownEditorProps, OutlineHeading } from '../MarkdownEditor';
 import { CardMentions } from './cardMentions';
-import { CommentHighlights, setCommentHighlights } from './commentHighlights';
+import { CommentHighlights, commentHighlightsKey, setCommentHighlights } from './commentHighlights';
+import { HeadingFolds, revealHeading, revealPos } from './headingFolds';
 import { schemaExtensions } from './schema';
 import { SlashCommand } from './slashCommand';
 import { SlashMenu } from './SlashMenu';
@@ -37,6 +38,7 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
   // mounts; callbacks that set parent state wait for the mount (see the effect below).
   const mounted = useRef(false);
   const pendingTops = useRef<Record<string, number> | null>(null);
+  const pendingOutline = useRef<OutlineHeading[] | null>(null);
 
   const insertImages = useCallback((files: File[], pos?: number) => {
     const upload = latest.current.uploadImage;
@@ -74,6 +76,17 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
         },
       }),
       ...(isPage ? [SlashCommand.configure({ onKeyDown: (e) => slashKeys.current?.(e) ?? false })] : []),
+      ...(isPage && props.foldStateKey
+        ? [
+            HeadingFolds.configure({
+              storageKey: `fira:folds:${props.foldStateKey}`,
+              onOutline: (outline) => {
+                if (mounted.current) latest.current.onOutline?.(outline);
+                else pendingOutline.current = outline;
+              },
+            }),
+          ]
+        : []),
       Extension.create({
         name: 'firaKeys',
         addKeyboardShortcuts: () => ({
@@ -148,6 +161,10 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
       latest.current.onCommentPositions?.(pendingTops.current);
       pendingTops.current = null;
     }
+    if (pendingOutline.current) {
+      latest.current.onOutline?.(pendingOutline.current);
+      pendingOutline.current = null;
+    }
     return () => {
       mounted.current = false;
     };
@@ -169,7 +186,18 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
     setCommentHighlights(editor.view, { activeId: props.activeCommentId ?? null });
   }, [editor, props.activeCommentId]);
 
-  useImperativeHandle(ref, () => ({ focus: () => editor.commands.focus() }), [editor]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => editor.commands.focus(),
+      revealHeading: (id) => revealHeading(editor.view, id),
+      revealComment: (id) => {
+        const range = commentHighlightsKey.getState(editor.state)?.ranges.get(id);
+        if (range) revealPos(editor.view, range.from);
+      },
+    }),
+    [editor],
+  );
 
   const fileInput = useRef<HTMLInputElement>(null);
   const pickImage = useMemo(() => (uploadImage ? () => fileInput.current?.click() : undefined), [uploadImage]);

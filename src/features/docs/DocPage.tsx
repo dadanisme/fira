@@ -12,6 +12,7 @@ import {
   MoreHorizontal,
   SmilePlus,
   SquareKanban,
+  TableOfContents,
   Trash2,
 } from 'lucide-react';
 import type { Page } from '@shared/types';
@@ -31,7 +32,13 @@ import { useThreads } from '../../data/threads';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
-import { MarkdownEditor, MarkdownView, type CommentAnchor, type MarkdownEditorHandle } from '../../components/MarkdownEditor';
+import {
+  MarkdownEditor,
+  MarkdownView,
+  type CommentAnchor,
+  type MarkdownEditorHandle,
+  type OutlineHeading,
+} from '../../components/MarkdownEditor';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu';
 import { Popover } from '../../components/Popover';
 import { useUser } from '../../lib/auth';
@@ -42,6 +49,8 @@ import { CommentsPanel, type PendingAnchor } from './CommentsPanel';
 import { ConfirmButton } from './ConfirmButton';
 import { HistoryDrawer } from './HistoryDrawer';
 import { IconPicker } from './IconPicker';
+import { Outline } from './Outline';
+import { tocEntries, useActiveHeading } from './scrollspy';
 import { ancestors } from './tree';
 import { useAutosave } from './useAutosave';
 
@@ -64,22 +73,33 @@ export default function DocPage() {
 }
 
 /**
- * Room for the article plus the comments aside: 58.75rem of page width (the old 73.75rem viewport
- * minus the default 15rem sidebar). Measured on the page itself, so it follows sidebar resize/collapse.
+ * Page widths (rem) at which columns fit beside the article. Measured on the page itself, so they
+ * follow sidebar resize/collapse.
+ * - WIDE_REM: the comments aside (the old 73.75rem viewport minus the default 15rem sidebar).
+ * - TOC_REM / TOC_WITH_ASIDE_REM: the table of contents column (11rem + 2.5rem gap) while keeping
+ *   the article at 34rem or more, without / with the comments aside (18rem + 2.5rem gap) and the 6rem padding.
  */
 const WIDE_REM = 58.75;
-function useWide(ref: RefObject<HTMLElement | null>): boolean {
-  const [wide, setWide] = useState(false);
+const TOC_REM = 53.5;
+const TOC_WITH_ASIDE_REM = 74;
+const WIDTH_STEPS = [TOC_REM, WIDE_REM, TOC_WITH_ASIDE_REM];
+
+/** The largest of WIDTH_STEPS the element's width reaches (0 below all), so resizing re-renders only at steps. */
+function useWidthStep(ref: RefObject<HTMLElement | null>): number {
+  const [step, setStep] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setWide(el.getBoundingClientRect().width >= WIDE_REM * remPx());
+    const measure = () => {
+      const rem = el.getBoundingClientRect().width / remPx();
+      setStep(WIDTH_STEPS.reduce((reached, s) => (rem >= s ? s : reached), 0));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [ref]);
-  return wide;
+  return step;
 }
 
 function PageView({ page, pages }: { page: Page; pages: Page[] }) {
@@ -93,7 +113,8 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const present = usePagePresence(page.id, me, save.editing && !page.trashed);
   const editor = useRef<MarkdownEditorHandle>(null);
   const root = useRef<HTMLDivElement>(null);
-  const wide = useWide(root);
+  const widthStep = useWidthStep(root);
+  const wide = widthStep >= WIDE_REM;
 
   // ------------------------------------------------ comments
   const { data: threads } = useThreads(page.id);
@@ -141,6 +162,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       if (!id) return;
       setAsideHidden(false);
       if (!wide) setCommentsOpen(true);
+      editor.current?.revealComment(id);
       document.querySelector(`[data-thread-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
     [wide],
@@ -181,6 +203,19 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
     return () => clearTimeout(timer);
   }, [revealTick]);
   const reveal = () => setRevealTick((n) => n + 1);
+
+  // ------------------------------------------------ table of contents
+  const [outline, setOutline] = useState<OutlineHeading[]>([]);
+  const toc = useMemo(() => (page.trashed ? [] : tocEntries(outline)), [outline, page.trashed]);
+  const showToc = toc.length >= 2;
+  const tocColumn = showToc && widthStep >= (showAside ? TOC_WITH_ASIDE_REM : TOC_REM);
+  const activeHeading = useActiveHeading(scroller, editorBox, toc, 2.5);
+  const goToHeading = (id: string) => {
+    const el = editor.current?.revealHeading(id);
+    const sc = scroller.current;
+    if (!el || !sc) return;
+    sc.scrollBy({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 1.5 * remPx(), behavior: 'smooth' });
+  };
 
   // ------------------------------------------------ misc
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -229,6 +264,29 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         </nav>
         <Presence people={present} />
         <SaveStatus status={save.status} />
+        {showToc && !tocColumn && (
+          <Popover
+            placement="bottom-end"
+            trigger={(props) => (
+              <IconButton {...props} label="Table of contents" active={props['aria-expanded']}>
+                <TableOfContents size="0.9375rem" />
+              </IconButton>
+            )}
+          >
+            {({ close }) => (
+              <nav aria-label="Table of contents" className="max-h-[60vh] w-64 overflow-y-auto p-3">
+                <Outline
+                  entries={toc}
+                  activeId={activeHeading}
+                  onSelect={(id) => {
+                    close();
+                    goToHeading(id);
+                  }}
+                />
+              </nav>
+            )}
+          </Popover>
+        )}
         <IconButton
           label={wide ? (asideHidden ? 'Show comments' : 'Hide comments') : 'Comments'}
           active={wide ? !asideHidden && showAside : commentsOpen}
@@ -339,6 +397,15 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
 
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative flex justify-center gap-10 px-6 sm:px-12">
+          {tocColumn && (
+            <nav
+              aria-label="Table of contents"
+              className="sticky top-6 max-h-[calc(100dvh-6rem)] w-44 shrink-0 self-start overflow-y-auto pb-8"
+              style={{ marginTop: editorTop }}
+            >
+              <Outline entries={toc} activeId={activeHeading} onSelect={goToHeading} />
+            </nav>
+          )}
           <article className="w-full max-w-180 min-w-0 pt-12 pb-4">
             <div className="group/head">
               {page.icon ? (
@@ -406,6 +473,8 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                   onCommentClick={activate}
                   onCommentPositions={setPositions}
                   onComment={onComment}
+                  foldStateKey={page.id}
+                  onOutline={setOutline}
                 />
               )}
             </div>

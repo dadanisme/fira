@@ -45,6 +45,21 @@ export interface MarkdownEditorProps {
   onCommentPositions?(tops: Record<string, number>): void;
   /** Shows "Comment" in the selection bubble menu; receives the selected quote with ≤ 32 chars of context. */
   onComment?(anchor: Omit<CommentAnchor, 'id'>): void;
+
+  // Heading folding and outline (page variant only).
+  /** Enables folding sections by heading; folds are kept on this device under this id (e.g. the page id). Read once. */
+  foldStateKey?: string;
+  /** The document's top-level headings in order, debounced (needs `foldStateKey`). */
+  onOutline?(headings: OutlineHeading[]): void;
+}
+
+/** A top-level heading, for a table of contents. */
+export interface OutlineHeading {
+  /** Stable while the heading text is unchanged (text + occurrence index); pass to `revealHeading`. */
+  id: string;
+  level: number;
+  text: string;
+  folded: boolean;
 }
 
 /** A comment thread's anchor in the document's plain text. */
@@ -57,6 +72,10 @@ export interface CommentAnchor {
 
 export interface MarkdownEditorHandle {
   focus(): void;
+  /** Unfolds the sections hiding a heading (see `onOutline`) and returns its element, e.g. to scroll to it. */
+  revealHeading(id: string): HTMLElement | null;
+  /** Unfolds the section hiding a comment thread's highlight, so it can be scrolled into view. */
+  revealComment(id: string): void;
 }
 
 /** Read-only rendering of stored Markdown (same styles as the editor). */

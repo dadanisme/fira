@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
+import { foldedPlaceholder } from './headingFolds';
 import { buildTextIndex, findAnchor, type TextAnchor } from './textIndex';
 
 export interface CommentAnchor extends TextAnchor {
@@ -10,7 +11,10 @@ export interface CommentAnchor extends TextAnchor {
 
 export interface CommentHighlightsOptions {
   onClick: (id: string) => void;
-  /** Top offset (px, relative to the editor element) of each anchored thread; orphans are absent. */
+  /**
+   * Top offset (px, relative to the editor element) of each anchored thread; orphans are absent.
+   * A thread inside a folded section is reported at its folded heading.
+   */
   onPositions: (tops: Record<string, number>) => void;
 }
 
@@ -120,7 +124,7 @@ export const CommentHighlights = Extension.create<CommentHighlightsOptions>({
             const tops: Record<string, number> = {};
             for (const [id, r] of s.ranges) {
               try {
-                tops[id] = Math.round(view.coordsAtPos(r.from).top - base);
+                tops[id] = Math.round(view.coordsAtPos(foldedPlaceholder(view.state, r.from) ?? r.from).top - base);
               } catch {
                 // Position not rendered (yet).
               }
