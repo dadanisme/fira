@@ -1,51 +1,56 @@
-import { memo, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import { Pencil, Trash } from 'lucide-react';
 import type { Card, Comment } from '@shared/types';
-import { addComment, deleteComment, updateComment, useComments } from '../../../data/comments';
+import { addComment, deleteComment, updateComment } from '../../../data/comments';
 import { useUser } from '../../../lib/auth';
 import { Avatar } from '../../../components/Avatar';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
-import { MarkdownEditor, MarkdownView } from '../../../components/MarkdownEditor';
+import { MarkdownEditor, MarkdownView, type MarkdownEditorHandle } from '../../../components/MarkdownEditor';
 import { run } from '../context';
 import { absoluteTime, relativeTime } from '../format';
 import { blurActive } from '../hooks';
-import { Section } from './Section';
 
-export function Comments({ card }: { card: Card }) {
-  const { data: comments } = useComments(card.id);
+/** Comments tab: composer on top, comments newest first. `comments` come oldest first from useComments. */
+export function Comments({ card, comments }: { card: Card; comments: readonly Comment[] }) {
   const user = useUser();
+  const newestFirst = useMemo(() => [...comments].reverse(), [comments]);
 
   return (
-    <Section title="Comments" meta={comments.length > 0 && <span className="text-xs text-fg-faint">{comments.length}</span>}>
-      <ul className="flex flex-col gap-3 px-2 pt-1">
-        {comments.map((c) => (
-          <CommentItem key={c.id} cardId={card.id} comment={c} mine={c.author.type === 'user' && c.author.id === user.uid} />
-        ))}
-      </ul>
+    <div className="flex flex-col gap-4">
       <Composer cardId={card.id} />
-    </Section>
+      {newestFirst.length > 0 ? (
+        <ul className="flex flex-col gap-3 px-2">
+          {newestFirst.map((c) => (
+            <CommentItem key={c.id} cardId={card.id} comment={c} mine={c.author.type === 'user' && c.author.id === user.uid} />
+          ))}
+        </ul>
+      ) : (
+        <p className="px-2 text-sm text-fg-faint">No comments yet</p>
+      )}
+    </div>
   );
 }
 
 function Composer({ cardId }: { cardId: string }) {
   const [draft, setDraft] = useState('');
-  const [key, setKey] = useState(0);
+  const editor = useRef<MarkdownEditorHandle>(null);
   const empty = !draft.trim();
 
   const submit = () => {
     if (empty) return;
     const body = draft.trim();
+    // Clearing the value empties the editor in place (no remount), so it keeps focus.
     setDraft('');
-    setKey((k) => k + 1);
+    editor.current?.focus();
     run(() => addComment(cardId, body));
   };
 
   return (
-    <div className="mx-2 mt-3 rounded-md border border-line bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-ring">
+    <div className="mx-2 rounded-md border border-line bg-surface focus-within:border-accent focus-within:ring-2 focus-within:ring-ring">
       <MarkdownEditor
-        key={key}
-        value=""
+        ref={editor}
+        value={draft}
         onChange={setDraft}
         onSubmit={submit}
         onCancel={blurActive}

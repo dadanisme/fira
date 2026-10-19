@@ -5,10 +5,9 @@ import { Dialog } from '../../../components/Dialog';
 import { IconButton } from '../../../components/IconButton';
 import { patchCard, useBoardData } from '../context';
 import { TypeIcon } from '../ui';
-import { ActivityTimeline } from './ActivityTimeline';
 import { Attachments } from './Attachments';
+import { CardActivity } from './CardActivity';
 import { Children } from './Children';
-import { Comments } from './Comments';
 import { Description } from './Description';
 import { EditableText } from './EditableText';
 import { Properties } from './Properties';
@@ -165,8 +164,7 @@ function CardDetail({ card, onOpen }: { card: Card; onOpen: (key: string) => voi
           {card.type !== 'subtask' && <Children card={card} onOpen={onOpen} />}
           <WorkPage card={card} />
           <Attachments card={card} />
-          <Comments card={card} />
-          <ActivityTimeline card={card} />
+          <CardActivity card={card} />
         </div>
       </div>
     </div>

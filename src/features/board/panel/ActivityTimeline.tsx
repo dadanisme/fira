@@ -1,67 +1,43 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import type { Activity, ActivityValue, Card, FieldDef, Priority } from '@shared/types';
-import { useActivity } from '../../../data/activity';
+import type { ReactNode } from 'react';
+import type { Activity, ActivityValue, FieldDef, Priority } from '@shared/types';
 import { Avatar } from '../../../components/Avatar';
 import { absoluteTime, formatDate, PRIORITY_NAMES, relativeTime } from '../format';
 import { useBoardData } from '../context';
-import { Section } from './Section';
 
 const COLLAPSE_AFTER = 8;
-/** Consecutive description edits by one actor within this window show as one line. */
-const MERGE_MS = 10 * 60 * 1000;
 
-export function ActivityTimeline({ card }: { card: Card }) {
-  const { data: entries } = useActivity(card.id);
+/** An activity entry; `count` > 1 when repeated description edits were grouped into it. */
+export type TimelineEntry = Activity & { count: number };
+
+/** Activity tab: newest first; older entries behind "Show N older". */
+export function ActivityTimeline({ entries, all, onShowAll }: { entries: readonly TimelineEntry[]; all: boolean; onShowAll(): void }) {
   const { project } = useBoardData();
-  const [all, setAll] = useState(false);
-
-  const merged = useMemo(() => {
-    const out: (Activity & { count: number })[] = [];
-    for (const e of entries) {
-      const prev = out.at(-1);
-      if (
-        prev &&
-        e.kind === 'description' &&
-        prev.kind === 'description' &&
-        prev.actor.id === e.actor.id &&
-        Date.parse(e.at) - Date.parse(prev.at) < MERGE_MS
-      ) {
-        out[out.length - 1] = { ...e, count: prev.count + 1 };
-      } else {
-        out.push({ ...e, count: 1 });
-      }
-    }
-    return out;
-  }, [entries]);
-
-  const shown = all ? merged : merged.slice(-COLLAPSE_AFTER);
+  const shown = all ? entries : entries.slice(0, COLLAPSE_AFTER);
 
   return (
-    <Section title="Activity">
-      <ol className="relative flex flex-col gap-1.5 px-2 pt-1">
-        {!all && merged.length > COLLAPSE_AFTER && (
-          <li>
-            <button type="button" onClick={() => setAll(true)} className="text-sm text-fg-muted hover:text-fg hover:underline">
-              Show {merged.length - COLLAPSE_AFTER} earlier
-            </button>
-          </li>
-        )}
-        {shown.map((e) => (
-          <li key={e.id} className="flex items-start gap-2 text-sm leading-5 text-fg-muted">
-            <Avatar actor={e.actor} size={16} className="mt-0.5" />
-            <span className="min-w-0 flex-1">
-              <span className="font-medium text-fg">{e.actor.name}</span> {describe(e, project.fields)}
-              {e.count > 1 && <span className="text-fg-faint"> ({e.count}×)</span>}
-              <span className="text-fg-faint" title={absoluteTime(e.at)}>
-                {' · '}
-                {relativeTime(e.at)}
-              </span>
+    <ol className="flex flex-col gap-1.5 px-2">
+      {shown.map((e) => (
+        <li key={e.id} className="flex items-start gap-2 text-sm leading-5 text-fg-muted">
+          <Avatar actor={e.actor} size={16} className="mt-0.5" />
+          <span className="min-w-0 flex-1">
+            <span className="font-medium text-fg">{e.actor.name}</span> {describe(e, project.fields)}
+            {e.count > 1 && <span className="text-fg-faint"> ({e.count}×)</span>}
+            <span className="text-fg-faint" title={absoluteTime(e.at)}>
+              {' · '}
+              {relativeTime(e.at)}
             </span>
-          </li>
-        ))}
-        {merged.length === 0 && <li className="text-sm text-fg-faint">No activity yet</li>}
-      </ol>
-    </Section>
+          </span>
+        </li>
+      ))}
+      {!all && entries.length > COLLAPSE_AFTER && (
+        <li>
+          <button type="button" onClick={onShowAll} className="text-sm text-fg-muted hover:text-fg hover:underline">
+            Show {entries.length - COLLAPSE_AFTER} older
+          </button>
+        </li>
+      )}
+      {entries.length === 0 && <li className="text-sm text-fg-faint">No activity yet</li>}
+    </ol>
   );
 }
 
