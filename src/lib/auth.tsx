@@ -2,6 +2,7 @@ import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type 
 import { FirebaseError } from 'firebase/app';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '../components/Button';
+import { Logo } from '../components/Logo';
 import { auth, OWNER_EMAIL } from './firebase';
 
 type AuthState = { status: 'loading' } | { status: 'signedOut'; error?: string } | { status: 'signedIn'; user: User };
@@ -65,7 +66,10 @@ function SignIn({ error, onError }: { error?: string; onError: (message: string)
   return (
     <div className="flex h-full items-center justify-center bg-sidebar p-6">
       <div className="flex w-72 flex-col items-center gap-4 rounded-xl border border-line bg-surface p-8 text-center shadow-card">
-        <div className="text-xl font-semibold tracking-tight">fira</div>
+        <div className="flex flex-col items-center gap-3">
+          <Logo size={48} />
+          <div className="text-xl font-semibold tracking-tight">fira</div>
+        </div>
         <p className="text-fg-muted">Your board and docs, fast.</p>
         <Button variant="primary" className="w-full" onClick={signIn}>
           Continue with Google

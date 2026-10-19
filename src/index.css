@@ -18,6 +18,7 @@
   --fg: #18181b;
   --fg-muted: #5f5f6a;
   --fg-faint: #9a9aa3;
+  --brand: #f55d3f; /* logo accent (the "active card"); same in both themes */
   --accent: #5b5bd6;
   --accent-hover: #4f4fc4;
   --accent-fg: #ffffff;
@@ -96,6 +97,7 @@
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-faint: var(--fg-faint);
+  --color-brand: var(--brand);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);

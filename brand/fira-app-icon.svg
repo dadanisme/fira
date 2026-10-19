@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- App icon: brand/fira-mark.svg in white on a solid near-black tile. Renders public/apple-touch-icon.png and public/icon-512.png. -->
+  <rect width="1024" height="1024" fill="#0B0B0C" />
+  <g transform="translate(192 192) scale(10)">
+    <g fill="#FFFFFF">
+      <path d="M20 25V17A16 16 0 0 1 36 1V11A6 6 0 0 0 30 17V25Z" />
+      <path d="M38 1H52A2 2 0 0 1 54 3V9A2 2 0 0 1 52 11H38Z" />
+      <path d="M18 27V37H12A2 2 0 0 1 10 35V29A2 2 0 0 1 12 27Z" />
+      <rect x="32" y="27" width="10" height="10" />
+      <path d="M44 27H52A2 2 0 0 1 54 29V35A2 2 0 0 1 52 37H44Z" />
+      <path d="M20 39H30V61A2 2 0 0 1 28 63H22A2 2 0 0 1 20 61Z" />
+    </g>
+    <rect x="20" y="27" width="10" height="10" fill="#F55D3F" />
+  </g>
+</svg>

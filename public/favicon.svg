@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#18181b"/><path d="M11 23V9h10M11 16h8" stroke="#fafafa" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- fira mark tuned for 16-32px: 16px grid, continuous stem, 1px gaps. Source: brand/fira-mark.svg -->
+  <style>
+    .n { fill: #0B0B0C; }
+    @media (prefers-color-scheme: dark) { .n { fill: #FFFFFF; } }
+  </style>
+  <g class="n">
+    <path d="M4 15.4V5A5 5 0 0 1 9 0V3A2 2 0 0 0 7 5V15.4A.6 .6 0 0 1 6.4 16H4.6A.6 .6 0 0 1 4 15.4Z" />
+    <path d="M10 0H14.4A.6 .6 0 0 1 15 .6V2.4A.6 .6 0 0 1 14.4 3H10Z" />
+    <path d="M3 7V10H1.6A.6 .6 0 0 1 1 9.4V7.6A.6 .6 0 0 1 1.6 7Z" />
+    <rect x="8" y="7" width="3" height="3" />
+    <path d="M12 7H14.4A.6 .6 0 0 1 15 7.6V9.4A.6 .6 0 0 1 14.4 10H12Z" />
+  </g>
+  <rect x="4" y="7" width="3" height="3" fill="#F55D3F" />
+</svg>

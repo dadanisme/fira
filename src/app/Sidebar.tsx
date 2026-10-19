@@ -5,6 +5,7 @@ import { useProjects } from '../data/projects';
 import { signOutUser, useUser } from '../lib/auth';
 import { Avatar } from '../components/Avatar';
 import { IconButton } from '../components/IconButton';
+import { Logo } from '../components/Logo';
 import { Menu, MenuItem } from '../components/Menu';
 import { Popover } from '../components/Popover';
 import { NewProjectForm } from './NewProjectForm';
@@ -17,7 +18,10 @@ const DocsTree = lazy(() => import('../features/docs/DocsTree'));
 export function Sidebar() {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-sidebar">
-      <div className="flex h-11 items-center px-4 text-[15px] font-semibold tracking-tight">fira</div>
+      <div className="flex h-11 items-center gap-2 px-4 text-[15px] font-semibold tracking-tight">
+        <Logo size={16} />
+        fira
+      </div>
       <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
         <ProjectsSection />
         <Suspense fallback={null}>
