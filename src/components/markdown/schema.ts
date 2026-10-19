@@ -6,6 +6,7 @@ import { TableKit } from '@tiptap/extension-table';
 import { Image } from '@tiptap/extension-image';
 import { Markdown } from '@tiptap/markdown';
 import { Plugin } from '@tiptap/pm/state';
+import { LinkClicks } from './linkClicks';
 
 /**
  * GFM ordered lists only. Tiptap's ordered list also reads `a.`/`IV.` markers, which
@@ -96,5 +97,7 @@ export function schemaExtensions(): AnyExtension[] {
     TableKit.configure({ table: { resizable: false } }),
     Image.configure({ inline: false }),
     Markdown.configure({ markedOptions: { gfm: true } }),
+    // Behavior only (no schema); inert in the read-only view, which renders plain <a> tags.
+    LinkClicks,
   ];
 }
