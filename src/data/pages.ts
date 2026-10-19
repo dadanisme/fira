@@ -13,9 +13,8 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useMemo } from 'react';
-import type { Card, Page, PageVersion } from '@shared/types';
+import type { Card, Page, PageAttachment, PageVersion } from '@shared/types';
 import { startsVersionSession, subtreeIds } from '@shared/pages';
-import { randomId } from '@shared/ids';
 import { db, storage } from '../lib/firebase';
 import { currentActor } from './actor';
 import { cardsCol, newDoc, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
@@ -40,12 +39,30 @@ export function useLinkedCard(cardId: string | undefined): Live<Card | null> {
   return useLiveDoc(ref);
 }
 
-/** Uploads an image embedded in a page to `pages/{pageId}/{fileId}-{name}`; resolves to its download URL. */
+/**
+ * Uploads an image embedded in a page to `pages/{pageId}/{attachmentId}/{name}` and records it
+ * in `pages/{pageId}/attachments` (like `POST /pages/{id}/attachments`); resolves to its
+ * non-expiring download URL.
+ */
 export async function uploadPageImage(pageId: string, file: File): Promise<string> {
   const name = file.name.replace(/[^\w.-]+/g, '_') || 'image';
-  const ref = storageRef(storage, `pages/${pageId}/${randomId(10)}-${name}`);
-  await uploadBytes(ref, file, { contentType: file.type || undefined });
-  return getDownloadURL(ref);
+  const entry = newDoc('pages', pageId, 'attachments');
+  const storagePath = `pages/${pageId}/${entry.id}/${name}`;
+  const contentType = file.type || 'application/octet-stream';
+  const ref = storageRef(storage, storagePath);
+  await uploadBytes(ref, file, { contentType });
+  const url = await getDownloadURL(ref);
+  const attachment: Stored<PageAttachment, 'createdAt'> = {
+    name,
+    size: file.size,
+    contentType,
+    storagePath,
+    url,
+    uploadedBy: currentActor(),
+    createdAt: serverTimestamp(),
+  };
+  setDoc(entry, attachment).catch(reportError);
+  return url;
 }
 
 /** Version snapshots of a page, newest first. */

@@ -3,6 +3,7 @@ import { cardItemRoutes } from './cardItems.js';
 import { cardRoutes } from './cards.js';
 import { meRoutes } from './me.js';
 import { openapiRoutes } from './openapi.js';
+import { pageAttachmentRoutes } from './pageAttachments.js';
 import { pageRoutes } from './pages.js';
 import { projectRoutes } from './projects.js';
 import { tokenRoutes } from './tokens.js';
@@ -16,4 +17,5 @@ export const routes: Route[] = [
   ...cardRoutes,
   ...cardItemRoutes,
   ...pageRoutes,
+  ...pageAttachmentRoutes,
 ];

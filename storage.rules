@@ -14,7 +14,9 @@ service firebase.storage {
       allow read, write: if isOwner();
     }
 
-    // Images embedded in pages: pages/{pageId}/{fileId}-{name}
+    // Files stored with pages: pages/{pageId}/{attachmentId}/{name} (older editor
+    // uploads: pages/{pageId}/{fileId}-{name}). Pages embed them by download-token URL
+    // (?alt=media&token=...), which Storage serves without evaluating these rules.
     match /pages/{path=**} {
       allow read, write: if isOwner();
     }

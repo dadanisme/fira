@@ -5,14 +5,13 @@ import { rankAfterLast } from '../../shared/rank.js';
 import { ACTIVITY_KINDS, type Activity, type ActivityKind, type Attachment, type Card, type Comment, type Page } from '../../shared/types.js';
 import { bucket, firestore } from '../_lib/admin.js';
 import { badRequest, conflict, created, jsonBody, noContent, notFound, unprocessable } from '../_lib/http.js';
-import { readFile } from '../_lib/multipart.js';
 import { paginate } from '../_lib/paginate.js';
 import { route } from '../_lib/router.js';
 import { fromDoc } from '../_lib/serialize.js';
 import { cardRefByKey, cardResponse, col, projectById, versionDoc, writeActivity } from '../_lib/store.js';
+import { storeUpload } from '../_lib/uploads.js';
 import { onlyKeys, optString, queryList } from '../_lib/validate.js';
 
-const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const URL_TTL_MS = 60 * 60 * 1000;
 const MAX_COMMENT = 50_000;
 
@@ -25,12 +24,6 @@ async function withUrl(attachment: Attachment) {
   const expires = Date.now() + URL_TTL_MS;
   const [url] = await bucket().file(attachment.storagePath).getSignedUrl({ action: 'read', expires });
   return { ...attachment, url, urlExpiresAt: new Date(expires).toISOString() };
-}
-
-/** Storage object names may not contain path separators from the client file name. */
-function safeName(name: string): string {
-  const cleaned = [...name.replace(/[/\\]/g, '_')].filter((ch) => ch.charCodeAt(0) >= 32).join('').trim();
-  return cleaned.slice(-200) || 'file';
 }
 
 export const cardItemRoutes = [
@@ -92,21 +85,11 @@ export const cardItemRoutes = [
 
   route('POST', '/cards/:key/attachments', 'token', async ({ req, params, actor }) => {
     const card = await cardOf(params.key);
-    const file = await readFile(req, 'file', MAX_ATTACHMENT_BYTES);
-    const name = safeName(file.name);
     const ref = col.attachments(card.id).doc();
-    const storagePath = `attachments/${card.id}/${ref.id}/${name}`;
-    await bucket().file(storagePath).save(file.data, { contentType: file.contentType, resumable: false });
+    const file = await storeUpload(req, (name) => `attachments/${card.id}/${ref.id}/${name}`);
     const batch = firestore().batch();
-    batch.set(ref, {
-      name,
-      size: file.data.length,
-      contentType: file.contentType,
-      storagePath,
-      uploadedBy: actor,
-      createdAt: Fv.serverTimestamp(),
-    });
-    writeActivity(batch, card.id, [{ kind: 'attachment', to: name }], actor);
+    batch.set(ref, { ...file, uploadedBy: actor, createdAt: Fv.serverTimestamp() });
+    writeActivity(batch, card.id, [{ kind: 'attachment', to: file.name }], actor);
     await batch.commit();
     return created(await withUrl(fromDoc<Attachment>(await ref.get())));
   }),

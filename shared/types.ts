@@ -221,6 +221,23 @@ export interface Thread {
   createdAt: Timestamp;
 }
 
+/**
+ * A file stored with a page (`pages/{pageId}/attachments/{id}`): API uploads and images
+ * pasted in the editor. `url` is a non-expiring Firebase download-token URL, usable as
+ * `![alt](url)` in the page Markdown. Re-uploading a name creates a new attachment.
+ */
+export interface PageAttachment {
+  id: string;
+  name: string;
+  size: number;
+  contentType: string;
+  /** `pages/{pageId}/{attachmentId}/{name}`. */
+  storagePath: string;
+  url: string;
+  uploadedBy: Actor;
+  createdAt: Timestamp;
+}
+
 // ---------------------------------------------------------------- tokens
 
 /** API token as exposed to clients (the `hash` never leaves the server). */

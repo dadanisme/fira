@@ -23,6 +23,7 @@ export const col = {
   attachments: (cardId: string) => firestore().collection('cards').doc(cardId).collection('attachments'),
   versions: (pageId: string) => firestore().collection('pages').doc(pageId).collection('versions'),
   threads: (pageId: string) => firestore().collection('pages').doc(pageId).collection('threads'),
+  pageAttachments: (pageId: string) => firestore().collection('pages').doc(pageId).collection('attachments'),
 };
 
 // ---------------------------------------------------------------- projects

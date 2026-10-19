@@ -51,9 +51,10 @@ All timestamps are Firestore `Timestamp` in the DB; ISO strings in the API.
 - `pages/{id}`: `title`, `icon?` (emoji), `parentId: string|null`, `rank`, `content` (markdown), `version` (int, starts 1, +1 per content/title save), `isTemplate: boolean`, `cardId?`, `trashed: boolean`, `trashedAt?`, `createdAt`, `updatedAt`, `updatedBy: Actor`.
   - `pages/{id}/versions/{id}`: `version`, `title`, `content`, `savedAt`, `actor`. A snapshot is written when a save starts a new "session" (> 10 min since previous snapshot or different actor), plus always on API writes.
   - `pages/{id}/threads/{id}`: inline comment threads. `quote` (selected text), `prefix`, `suffix` (≤ 32 chars of surrounding text, for re-anchoring — Markdown cannot hold marks, so the editor highlights by searching quote+context on load), `resolved: boolean`, `resolvedAt?`, `messages: {id, body, author: Actor, createdAt}[]`, `createdAt`.
+  - `pages/{id}/attachments/{id}`: files stored with the page, for embedding (API uploads and images pasted in the editor). `name`, `size`, `contentType`, `storagePath` (`pages/{pageId}/{attachmentId}/{name}`), `url` (non-expiring Firebase download-token URL, `https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<encoded path>?alt=media&token=<uuid>`, token in the object's `firebaseStorageDownloadTokens` metadata), `uploadedBy: Actor`, `createdAt`. Immutable: uploading the same name again creates a new attachment (new id, path and URL); deleting removes the Storage object, so its URL stops working.
 - `tokens/{id}`: `name` (e.g. `agen`), `color`, `hash` (sha256 of the secret), `prefix` (first 8 chars, for display), `createdAt`, `lastUsedAt?`, `revoked: boolean`. Secret format `fira_<32 random base62>`, shown once at creation. Created/revoked only via the API (server).
 
-Firestore rules: only the owner (`request.auth.token.email == OWNER_EMAIL` and `email_verified`) can read/write everything except `tokens` (owner read-only). Storage rules: owner read/write on `attachments/**`.
+Firestore rules: only the owner (`request.auth.token.email == OWNER_EMAIL` and `email_verified`) can read/write everything except `tokens` (owner read-only). Storage rules: owner read/write on `attachments/**` and `pages/**`. Download-token URLs (page attachments) are served without evaluating the rules.
 
 ## Board (SPA)
 
@@ -118,6 +119,9 @@ GET    /api/v1/pages/{id}/threads?resolved=false
 POST   /api/v1/pages/{id}/threads                {quote, prefix?, suffix?, body}
 POST   /api/v1/pages/{id}/threads/{tid}/messages {body}
 PATCH  /api/v1/pages/{id}/threads/{tid}          {resolved}
+GET    /api/v1/pages/{id}/attachments           with permanent download-token URLs
+POST   /api/v1/pages/{id}/attachments           multipart/form-data `file` (≤ 4 MB) → {..., url} for `![alt](url)`; same name again = new attachment
+DELETE /api/v1/pages/{id}/attachments/{aid}     deletes the stored file too (URL stops working)
 ```
 
 Every mutating endpoint writes activity entries (cards) / versions (pages) exactly like the UI.

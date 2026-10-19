@@ -802,6 +802,95 @@ await test('threads: create, list (resolved filter), reply, resolve/unresolve', 
   expectStatus(await call('PATCH', `${k}/nope`, { body: { resolved: true } }), 404);
 });
 
+// ---------------------------------------------------------------- page attachments
+
+await test('page attachments: upload → permanent token URL, embed in content, re-upload is a new URL, delete', async () => {
+  const page = (await call('POST', '/pages', { body: { title: 'Slides', content: '## Visual' } })).body;
+  const k = `/pages/${page.id}/attachments`;
+  // A 1×1 PNG plus padding, so the bytes compare is meaningful.
+  const png = Buffer.concat([
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'),
+    Buffer.alloc(2048, 7),
+  ]);
+  const upload = (name: string) => {
+    const form = new FormData();
+    form.append('file', new Blob([png], { type: 'image/png' }), name);
+    return call('POST', k, { form });
+  };
+
+  const up = await upload('slide-01-v2.png');
+  expectStatus(up, 201);
+  assert.equal(up.body.name, 'slide-01-v2.png');
+  assert.equal(up.body.size, png.length);
+  assert.equal(up.body.contentType, 'image/png');
+  assert.equal(up.body.storagePath, `pages/${page.id}/${up.body.id}/slide-01-v2.png`);
+  assert.equal(up.body.uploadedBy.name, 'smoke');
+  assert.ok(up.body.createdAt);
+  const url = new URL(up.body.url);
+  assert.equal(url.pathname, `/v0/b/${BUCKET}/o/${encodeURIComponent(up.body.storagePath)}`);
+  assert.equal(url.searchParams.get('alt'), 'media');
+  assert.match(url.searchParams.get('token') ?? '', /^[0-9a-f-]{36}$/);
+  assert.deepEqual([...url.searchParams.keys()].sort(), ['alt', 'token'], 'no expiry/signature params');
+  assert.doesNotMatch(up.body.url, /expires/i);
+
+  // The token URL serves the bytes without any auth; without the token, Storage rules apply.
+  const dl = await fetch(up.body.url);
+  assert.equal(dl.status, 200, `download via token URL: ${dl.status}`);
+  assert.ok(Buffer.from(await dl.arrayBuffer()).equals(png), 'same bytes');
+  const noToken = new URL(up.body.url);
+  noToken.searchParams.delete('token');
+  assert.ok([401, 403].includes((await fetch(noToken)).status), 'rules still guard the object without the token');
+
+  const list = await call('GET', k);
+  expectStatus(list, 200);
+  assert.deepEqual(list.body.items, [up.body]);
+
+  const again = await upload('slide-01-v2.png');
+  expectStatus(again, 201);
+  assert.notEqual(again.body.id, up.body.id, 're-upload: new id');
+  assert.notEqual(again.body.url, up.body.url, 're-upload: new URL');
+  assert.equal((await fetch(up.body.url)).status, 200, 'the first URL keeps working');
+  assert.deepEqual((await call('GET', k)).body.items.map((a: any) => a.id), [up.body.id, again.body.id]);
+
+  // Embed in the page; the API stores the Markdown byte-for-byte.
+  const content = `## Visual\n\n![Slide 1](${up.body.url})\n\n![Slide 1 v2](${again.body.url})`;
+  expectStatus(await call('PATCH', `/pages/${page.id}`, { body: { content, version: page.version } }), 200);
+  assert.equal((await call('GET', `/pages/${page.id}`)).body.content, content);
+
+  // Names with spaces and parentheses stay safe inside ![alt](url).
+  const odd = await upload('slide (1) final.png');
+  expectStatus(odd, 201);
+  assert.doesNotMatch(odd.body.url, /[()\s]/);
+  assert.equal((await fetch(odd.body.url)).status, 200);
+
+  // Errors
+  expectStatus(await call('GET', '/pages/nope/attachments'), 404, 'not_found');
+  const form = new FormData();
+  form.append('file', new Blob([png]), 'x.png');
+  expectStatus(await call('POST', '/pages/nope/attachments', { form }), 404, 'not_found');
+  const big = new FormData();
+  big.append('file', new Blob([Buffer.alloc(4 * 1024 * 1024 + 1)]), 'big.bin');
+  expectStatus(await call('POST', k, { form: big }), 413, 'payload_too_large');
+  expectStatus(await call('POST', k, { body: { file: 'x' } }), 400, 'bad_request');
+  assert.equal((await call('GET', k)).body.items.length, 3, 'rejected uploads store nothing');
+
+  // A trashed page still accepts uploads.
+  await call('PATCH', `/pages/${page.id}`, { body: { trashed: true } });
+  const trashed = await upload('late.png');
+  expectStatus(trashed, 201);
+  await call('PATCH', `/pages/${page.id}`, { body: { trashed: false } });
+
+  // Delete: the URL stops working and the attachment leaves the list.
+  expectStatus(await call('DELETE', `${k}/${up.body.id}`), 204);
+  expectStatus(await call('DELETE', `${k}/${up.body.id}`), 404, 'not_found');
+  expectStatus(await call('DELETE', `/pages/nope/attachments/${again.body.id}`), 404, 'not_found');
+  assert.ok([403, 404].includes((await fetch(up.body.url)).status), 'deleted URL no longer fetchable');
+  const [still] = await bucket().file(up.body.storagePath).exists();
+  assert.equal(still, false, 'stored file deleted');
+  assert.deepEqual((await call('GET', k)).body.items.map((a: any) => a.id), [again.body.id, odd.body.id, trashed.body.id]);
+  assert.equal((await fetch(again.body.url)).status, 200, 'other attachments unaffected');
+});
+
 // ---------------------------------------------------------------- work page
 
 await test('POST /cards/{key}/page creates the page from the project template, links both ways, 409 when linked', async () => {

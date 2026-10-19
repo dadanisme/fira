@@ -186,6 +186,16 @@ const attachmentExample = {
   url: 'https://storage.googleapis.com/fira-app.appspot.com/attachments/Cd4Hq8Lm2Rz6Wx0Kp3Ty/At7Kp3Lx9Hq2Vm6Rz1Nw/thumbnail-draft.png?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Expires=3600&X-Goog-Signature=5f2c9a',
   urlExpiresAt: '2026-10-19T09:35:40.000Z',
 };
+const pageAttachmentExample = {
+  id: 'Pa4Hx8Lq2Vn6Rt0Kz3Mw',
+  name: 'slide-01-v2.png',
+  size: 1243871,
+  contentType: 'image/png',
+  storagePath: `pages/${pageExample.id}/Pa4Hx8Lq2Vn6Rt0Kz3Mw/slide-01-v2.png`,
+  url: `https://firebasestorage.googleapis.com/v0/b/fira-app.appspot.com/o/pages%2F${pageExample.id}%2FPa4Hx8Lq2Vn6Rt0Kz3Mw%2Fslide-01-v2.png?alt=media&token=3f6c2b1e-8d4a-4c7e-9b2f-5a1d0e7c4b93`,
+  uploadedBy: agent,
+  createdAt: '2026-10-19T09:05:31.000Z',
+};
 const activityExamples = [
   { id: 'Ac0Cr1Hq', at: '2026-10-01T09:00:00.000Z', actor: owner, kind: 'created' },
   { id: 'Ac1Fd2Lx', at: '2026-10-02T14:05:10.000Z', actor: agent, kind: 'field', field: 'ideaSource', from: null, to: 'Audience question' },
@@ -339,6 +349,8 @@ async function appendToDescription(key, text) {
 
 Upload one file per request as \`multipart/form-data\` in a part named \`file\`, at most **4 MB** (larger files are rejected with 413). The stored content type is the one sent with the part. Attachment responses include a signed download \`url\` that works without the token and expires after one hour (\`urlExpiresAt\`); list the attachments again for fresh URLs.
 
+**Card** attachments (\`/cards/{key}/attachments\`) get those short-lived signed URLs. **Page** attachments (\`/pages/{id}/attachments\`) are for embedding: their \`url\` never expires, so write it into the page as \`![alt](url)\` and the image shows in the app's editor and read-only view. Page attachment URLs are immutable — uploading the same file name again creates a new attachment with a new URL, and older page versions keep pointing at the old file — and deleting an attachment makes its URL stop working.
+
 ## Actors and history
 
 Every write is attributed to an **actor** \`{ type, id, name }\`: \`token\` for API calls (named after the token), \`user\` for the owner in the app. It appears as \`createdBy\`/\`updatedBy\` on cards, \`author\` on comments and thread messages, \`uploadedBy\` on attachments, \`updatedBy\` on pages and \`actor\` on activity entries and page versions — so name tokens after the agents using them.
@@ -377,7 +389,8 @@ export const openapi = {
     { name: 'Attachments', description: 'Files on a card (≤ 4 MB each), stored in Firebase Storage and downloaded through signed URLs.' },
     {
       name: 'Pages',
-      description: 'Docs: one tree of Markdown pages, including templates and the trash. Title/content saves are versioned and snapshotted.',
+      description:
+        'Docs: one tree of Markdown pages, including templates and the trash. Title/content saves are versioned and snapshotted. Page attachments are files (≤ 4 MB) with permanent URLs for embedding images in page Markdown.',
     },
     { name: 'Threads', description: 'Inline comment threads anchored to a quote in a page, with replies and resolve/reopen.' },
     { name: 'Projects & labels', description: 'Read-only project configuration (columns, custom fields) and the global label list.' },
@@ -804,6 +817,76 @@ curl -X PATCH ${BASE}/cards/NI-42 \\
           "The page's version snapshots, newest first. The app writes one per editing session (a different editor or more than 10 minutes since the last snapshot); the API writes one on every save.",
         parameters: [param('pageId'), param('limit'), param('cursor')],
         responses: { 200: ok('A page of versions', pageOf('PageVersion'), list([versionExample])), ...errors(400, 401, 404) },
+      },
+    },
+
+    '/pages/{id}/attachments': {
+      parameters: [param('pageId')],
+      get: {
+        tags: ['Pages'],
+        operationId: 'listPageAttachments',
+        summary: 'List page attachments',
+        description:
+          "The page's attachments, oldest first: files uploaded through the API and images pasted into the page in the app. Each `url` is permanent (no expiry).",
+        parameters: [param('limit'), param('cursor')],
+        responses: { 200: ok('A page of page attachments', pageOf('PageAttachment'), list([pageAttachmentExample])), ...errors(400, 401, 404) },
+      },
+      post: {
+        tags: ['Pages'],
+        operationId: 'uploadPageAttachment',
+        summary: 'Upload a page attachment',
+        description: [
+          'Uploads one file as `multipart/form-data` in the part `file` (at most 4 MB; 413 otherwise) and stores it with the page at `pages/{pageId}/{attachmentId}/{name}`. Any content type is accepted; the stored one is the part\'s. The page may be in the trash; an unknown page is a 404.',
+          '',
+          'The response `url` is a Firebase Storage download URL (`…?alt=media&token=…`) that **never expires** and needs no API token. Embed it in the page Markdown as `![alt](url)` (save the content with `PATCH /pages/{id}`); the image renders in the app\'s editor and read-only view, and editing the page in the app keeps the URL unchanged.',
+          '',
+          '**Same name again = new attachment.** Nothing is replaced: each upload gets its own id, storage path and URL, so URLs are immutable and older page versions keep showing the file they referenced. To swap an image, upload the new file and replace the URL in the page content (then delete the old attachment if no version should keep it).',
+        ].join('\n'),
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: { file: { type: 'string', format: 'binary', description: 'The file, at most 4 MB' } },
+              },
+            },
+          },
+        },
+        responses: { 201: ok('The stored attachment with its permanent URL', ref('PageAttachment'), pageAttachmentExample), ...errors(400, 401, 404, 413) },
+        'x-codeSamples': [
+          curl(
+            'Upload, then embed',
+            `PAGE=${pageExample.id}
+
+# 1. Upload the slide; keep its permanent URL
+url=$(curl -s -X POST ${BASE}/pages/$PAGE/attachments \\
+  -H "Authorization: Bearer $FIRA_TOKEN" \\
+  -F "file=@slide-01-v2.png;type=image/png" | jq -r .url)
+
+# 2. Append it to the page content (versioned save)
+page=$(curl -s ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN")
+jq -n --argjson page "$page" --arg url "$url" \\
+  '{content: ($page.content + "\\n\\n![Slide 1](" + $url + ")"), version: $page.version}' |
+curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
+  -H "Content-Type: application/json" -d @-`,
+          ),
+        ],
+      },
+    },
+    '/pages/{id}/attachments/{aid}': {
+      delete: {
+        tags: ['Pages'],
+        operationId: 'deletePageAttachment',
+        summary: 'Delete a page attachment',
+        description:
+          'Deletes the attachment record **and its stored file**: its `url` stops working, so images in the page — or in older versions of it — that use the URL break. Remove the image from the page content first.',
+        parameters: [
+          param('pageId'),
+          { name: 'aid', in: 'path', required: true, description: 'Page attachment id', schema: { type: 'string' }, example: pageAttachmentExample.id },
+        ],
+        responses: { 204: { description: 'Deleted' }, ...errors(401, 404) },
       },
     },
 
@@ -1291,6 +1374,24 @@ curl -X PATCH ${BASE}/cards/NI-42 \\
           createdAt: timestampSchema(),
           url: { type: 'string', format: 'uri', description: 'Signed download URL; no token needed' },
           urlExpiresAt: { ...timestampSchema(), description: 'When `url` stops working (one hour after the request)' },
+        },
+      },
+      PageAttachment: {
+        type: 'object',
+        required: ['id', 'name', 'size', 'contentType', 'storagePath', 'url', 'uploadedBy', 'createdAt'],
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string', description: 'File name (path separators replaced)' },
+          size: { type: 'integer', description: 'Bytes' },
+          contentType: { type: 'string' },
+          storagePath: { type: 'string', description: 'pages/{pageId}/{attachmentId}/{name}' },
+          url: {
+            type: 'string',
+            format: 'uri',
+            description: 'Permanent download URL (`?alt=media&token=…`); no API token needed. Use it as `![alt](url)` in page Markdown. Stops working when the attachment is deleted.',
+          },
+          uploadedBy: ref('Actor'),
+          createdAt: timestampSchema(),
         },
       },
       Page: {

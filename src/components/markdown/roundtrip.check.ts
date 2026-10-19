@@ -2,6 +2,7 @@
  * Markdown round-trip check for the editor schema. Run: `npx tsx src/components/markdown/roundtrip.check.ts`.
  * For each sample: parse → serialize must be semantically lossless (same document
  * when parsed again) and stable (serializing twice gives the same Markdown).
+ * `exactSamples` (images with Firebase download-token URLs) must come back byte-for-byte.
  */
 import { getSchema } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
@@ -27,6 +28,18 @@ const samples: string[] = [
   '',
 ];
 
+// Page attachment URLs (`POST /pages/{id}/attachments`, editor uploads) must survive an
+// edit in the app byte-for-byte: no re-encoding of `%2F`, no escaping of `&`, no `<…>`.
+const tokenUrl = (path: string) =>
+  `https://firebasestorage.googleapis.com/v0/b/fira-app.appspot.com/o/${path}?alt=media&token=3f6c2b1e-8d4a-4c7e-9b2f-5a1d0e7c4b93`;
+const exactSamples: string[] = [
+  `![Slide 1](${tokenUrl('pages%2FPgWk3Nq7Hd1Lm5Rx9Zc2%2FPa4Hx8Lq2Vn6Rt0Kz3Mw%2Fslide-01-v2.png')})`,
+  `## Visual\n\n![Slide 1](${tokenUrl('pages%2Fp1%2Fa1%2Fslide-01.png')})\n\n![Slide 2](${tokenUrl('pages%2Fp1%2Fa2%2Fslide-02.png')})\n\nAfter the gallery.`,
+  `![](${tokenUrl('pages%2Fp1%2Fa3%2Fslide%20%281%29%20final.png')})`,
+  `![Slide 1](http://127.0.0.1:9199/v0/b/demo-fira.appspot.com/o/pages%2Fp1%2Fa1%2Fslide.png?alt=media&token=3f6c2b1e-8d4a-4c7e-9b2f-5a1d0e7c4b93)`,
+];
+samples.push(...exactSamples);
+
 let failed = 0;
 for (const input of samples) {
   const doc = md.parse(input);
@@ -34,7 +47,7 @@ for (const input of samples) {
   const lossless = JSON.stringify(md.parse(out)) === JSON.stringify(doc);
   const stable = md.serialize(md.parse(out)) === out;
   const status = !lossless ? 'LOSSY' : !stable ? 'UNSTABLE' : out === input ? 'exact' : 'normalized';
-  if (!lossless || !stable) failed++;
+  if (!lossless || !stable || (exactSamples.includes(input) && out !== input)) failed++;
   console.log(`${status.padEnd(10)} ${JSON.stringify(input).slice(0, 70)}`);
   if (status !== 'exact') console.log(`           → ${JSON.stringify(out).slice(0, 140)}`);
 }
