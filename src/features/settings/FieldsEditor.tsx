@@ -63,7 +63,7 @@ export function FieldsEditor({ project }: { project: Project }) {
                 <div className="min-w-0 flex-1">
                   <EditableText label="Field name" value={f.name} allowEmpty={false} onCommit={(n) => patch(f.id, { name: n.trim() })} />
                 </div>
-                <code className="shrink-0 px-1 text-[11px] text-fg-faint" title="API key">
+                <code className="shrink-0 px-1 text-xs text-fg-faint" title="API key">
                   {f.key}
                 </code>
                 <Select
@@ -83,17 +83,17 @@ export function FieldsEditor({ project }: { project: Project }) {
                   ))}
                 </Select>
                 <IconButton label="Move up" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
-                  <ArrowUp size={12} />
+                  <ArrowUp size="0.75rem" />
                 </IconButton>
                 <IconButton label="Move down" size="sm" disabled={i === fields.length - 1} onClick={() => move(i, 1)}>
-                  <ArrowDown size={12} />
+                  <ArrowDown size="0.75rem" />
                 </IconButton>
                 <IconButton
                   label={`Delete ${f.name}`}
                   className="hover:text-danger"
                   onClick={() => confirm(`Delete field “${f.name}”? Values stay on cards but are no longer shown.`) && save(fields.filter((x) => x.id !== f.id))}
                 >
-                  <Trash size={13} />
+                  <Trash size="0.8125rem" />
                 </IconButton>
               </div>
               {hasOptions(f.type) && <OptionsEditor options={f.options ?? []} onChange={(options) => patch(f.id, { options })} />}
@@ -101,7 +101,7 @@ export function FieldsEditor({ project }: { project: Project }) {
           ))}
         </RowList>
       ) : (
-        <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-fg-faint">No custom fields yet</p>
+        <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-sm text-fg-faint">No custom fields yet</p>
       )}
       <form onSubmit={add} className="mt-2 flex gap-2">
         <Input aria-label="New field name" placeholder="New field" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
@@ -112,7 +112,7 @@ export function FieldsEditor({ project }: { project: Project }) {
             </option>
           ))}
         </Select>
-        <Button type="submit" icon={<Plus size={13} />} disabled={!name.trim()}>
+        <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!name.trim()}>
           Add field
         </Button>
       </form>
@@ -135,12 +135,12 @@ function OptionsEditor({ options, onChange }: { options: string[]; onChange: (op
   };
   return (
     <div className="ml-2 flex flex-wrap items-center gap-1 pb-0.5">
-      <span className="mr-1 text-[11px] text-fg-faint">Options</span>
+      <span className="mr-1 text-xs text-fg-faint">Options</span>
       {options.map((o) => (
-        <span key={o} className="inline-flex h-[20px] items-center gap-0.5 rounded bg-sunken pr-0.5 pl-1.5 text-[11px] text-fg">
+        <span key={o} className="inline-flex h-5 items-center gap-0.5 rounded bg-sunken pr-0.5 pl-1.5 text-xs text-fg">
           {o}
           <button type="button" aria-label={`Remove option ${o}`} onClick={() => onChange(options.filter((x) => x !== o))} className="rounded text-fg-faint hover:text-fg">
-            <X size={11} />
+            <X size="0.6875rem" />
           </button>
         </span>
       ))}
@@ -150,7 +150,7 @@ function OptionsEditor({ options, onChange }: { options: string[]; onChange: (op
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKeyDown}
-        className="h-[20px] w-32 rounded bg-transparent px-1 text-[12px] text-fg outline-none placeholder:text-fg-faint focus:bg-hover"
+        className="h-5 w-32 rounded bg-transparent px-1 text-sm text-fg outline-none placeholder:text-fg-faint focus:bg-hover"
       />
     </div>
   );

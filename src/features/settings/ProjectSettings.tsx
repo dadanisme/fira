@@ -27,16 +27,16 @@ export function ProjectSettings({ project }: { project: Project }) {
       <PageTitle
         title={
           <span className="flex items-center gap-2">
-            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-[12px] text-fg-muted">{project.key}</span>
+            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-sm text-fg-muted">{project.key}</span>
             {project.name}
           </span>
         }
       >
         <Link
           to={`/p/${project.key}`}
-          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[13px] text-fg-muted hover:bg-hover hover:text-fg"
+          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-base text-fg-muted hover:bg-hover hover:text-fg"
         >
-          Open board <ArrowUpRight size={13} />
+          Open board <ArrowUpRight size="0.8125rem" />
         </Link>
       </PageTitle>
 

@@ -11,7 +11,7 @@ export function Input({ variant = 'default', className, ...rest }: InputProps) {
   return (
     <input
       className={cx(
-        'h-7 min-w-0 rounded-md bg-transparent px-2 text-[13px] text-fg placeholder:text-fg-faint outline-none',
+        'h-7 min-w-0 rounded-md bg-transparent px-2 text-base text-fg placeholder:text-fg-faint outline-none',
         variant === 'default'
           ? 'border border-line bg-surface focus:border-accent focus:ring-2 focus:ring-ring'
           : 'border border-transparent hover:bg-hover focus:border-line focus:bg-surface',

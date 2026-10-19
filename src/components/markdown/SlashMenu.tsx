@@ -26,20 +26,20 @@ interface Item {
 }
 
 const ITEMS: Item[] = [
-  { title: 'Text', keywords: 'paragraph plain', icon: <Pilcrow size={15} />, run: (e) => e.chain().focus().setParagraph().run() },
-  { title: 'Heading 1', keywords: 'h1 title', icon: <Heading1 size={15} />, run: (e) => e.chain().focus().setHeading({ level: 1 }).run() },
-  { title: 'Heading 2', keywords: 'h2 subtitle', icon: <Heading2 size={15} />, run: (e) => e.chain().focus().setHeading({ level: 2 }).run() },
-  { title: 'Heading 3', keywords: 'h3', icon: <Heading3 size={15} />, run: (e) => e.chain().focus().setHeading({ level: 3 }).run() },
-  { title: 'Bulleted list', keywords: 'ul unordered bullet', icon: <List size={15} />, run: (e) => e.chain().focus().toggleBulletList().run() },
-  { title: 'Numbered list', keywords: 'ol ordered number', icon: <ListOrdered size={15} />, run: (e) => e.chain().focus().toggleOrderedList().run() },
-  { title: 'Task list', keywords: 'todo checkbox check', icon: <ListChecks size={15} />, run: (e) => e.chain().focus().toggleTaskList().run() },
-  { title: 'Quote', keywords: 'blockquote', icon: <Quote size={15} />, run: (e) => e.chain().focus().toggleBlockquote().run() },
-  { title: 'Code block', keywords: 'pre snippet', icon: <Code2 size={15} />, run: (e) => e.chain().focus().toggleCodeBlock().run() },
-  { title: 'Divider', keywords: 'hr rule separator line', icon: <Minus size={15} />, run: (e) => e.chain().focus().setHorizontalRule().run() },
+  { title: 'Text', keywords: 'paragraph plain', icon: <Pilcrow size="0.9375rem" />, run: (e) => e.chain().focus().setParagraph().run() },
+  { title: 'Heading 1', keywords: 'h1 title', icon: <Heading1 size="0.9375rem" />, run: (e) => e.chain().focus().setHeading({ level: 1 }).run() },
+  { title: 'Heading 2', keywords: 'h2 subtitle', icon: <Heading2 size="0.9375rem" />, run: (e) => e.chain().focus().setHeading({ level: 2 }).run() },
+  { title: 'Heading 3', keywords: 'h3', icon: <Heading3 size="0.9375rem" />, run: (e) => e.chain().focus().setHeading({ level: 3 }).run() },
+  { title: 'Bulleted list', keywords: 'ul unordered bullet', icon: <List size="0.9375rem" />, run: (e) => e.chain().focus().toggleBulletList().run() },
+  { title: 'Numbered list', keywords: 'ol ordered number', icon: <ListOrdered size="0.9375rem" />, run: (e) => e.chain().focus().toggleOrderedList().run() },
+  { title: 'Task list', keywords: 'todo checkbox check', icon: <ListChecks size="0.9375rem" />, run: (e) => e.chain().focus().toggleTaskList().run() },
+  { title: 'Quote', keywords: 'blockquote', icon: <Quote size="0.9375rem" />, run: (e) => e.chain().focus().toggleBlockquote().run() },
+  { title: 'Code block', keywords: 'pre snippet', icon: <Code2 size="0.9375rem" />, run: (e) => e.chain().focus().toggleCodeBlock().run() },
+  { title: 'Divider', keywords: 'hr rule separator line', icon: <Minus size="0.9375rem" />, run: (e) => e.chain().focus().setHorizontalRule().run() },
   {
     title: 'Table',
     keywords: 'grid',
-    icon: <Table size={15} />,
+    icon: <Table size="0.9375rem" />,
     run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
   },
 ];
@@ -74,7 +74,7 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
 
   const items = useMemo(() => {
     const all = pickImage
-      ? [...ITEMS, { title: IMAGE_ITEM_TITLE, keywords: 'picture photo upload', icon: <ImageIcon size={15} />, run: pickImage }]
+      ? [...ITEMS, { title: IMAGE_ITEM_TITLE, keywords: 'picture photo upload', icon: <ImageIcon size="0.9375rem" />, run: pickImage }]
       : ITEMS;
     const q = slash?.query.toLowerCase() ?? '';
     return q ? all.filter((i) => i.title.toLowerCase().includes(q) || i.keywords.includes(q)) : all;
@@ -140,7 +140,7 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
       className="fixed z-50 flex max-h-72 w-60 flex-col overflow-y-auto rounded-lg bg-surface p-1 text-fg shadow-popover"
       style={pos ?? { top: 0, left: 0, opacity: 0 }}
     >
-      <div className="px-2 pt-1 pb-1 text-[11px] font-medium text-fg-faint">Blocks</div>
+      <div className="px-2 pt-1 pb-1 text-xs font-medium text-fg-faint">Blocks</div>
       {items.map((item, i) => (
         <button
           key={item.title}
@@ -150,7 +150,7 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
           data-selected={i === index}
           onMouseEnter={() => setIndex(i)}
           onClick={() => choose(item)}
-          className={cx('flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2 text-left text-[13px]', i === index && 'bg-hover')}
+          className={cx('flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2 text-left text-base', i === index && 'bg-hover')}
         >
           <span className="flex size-6 items-center justify-center rounded border border-line bg-surface text-fg-muted">{item.icon}</span>
           {item.title}

@@ -54,7 +54,7 @@ export function CardDialog({
       onExited={onExited}
       labelledBy={titleId}
       returnFocus={() => document.querySelector<HTMLElement>(`a[href="/p/${projectKey}/${openerKey}"]`)}
-      className="sm:max-w-[920px] sm:border sm:border-line"
+      className="sm:max-w-230 sm:border sm:border-line"
     >
       <h2 id={titleId} className="sr-only">
         {card ? `${card.key} ${card.title}` : cardKey}
@@ -64,7 +64,7 @@ export function CardDialog({
         <span className="flex-1" />
         {card && <Actions card={card} />}
         <IconButton label="Close (Esc)" onClick={onClose}>
-          <X size={15} />
+          <X size="0.9375rem" />
         </IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -88,7 +88,7 @@ function Breadcrumb({ card, cardKey, onOpen }: { card: Card | undefined; cardKey
         type="button"
         onClick={() => onOpen(c.key)}
         title={c.title}
-        className="max-w-40 truncate rounded px-1 font-mono text-[12px] text-fg-muted hover:bg-hover hover:text-fg"
+        className="max-w-40 truncate rounded px-1 font-mono text-sm text-fg-muted hover:bg-hover hover:text-fg"
       >
         {c.key}
       </button>
@@ -99,11 +99,11 @@ function Breadcrumb({ card, cardKey, onOpen }: { card: Card | undefined; cardKey
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
       {grand && crumb(grand)}
       {parent && crumb(parent)}
-      <span className="flex items-center gap-1 px-1 font-mono text-[12px] font-medium text-fg">
+      <span className="flex items-center gap-1 px-1 font-mono text-sm font-medium text-fg">
         {card && <TypeIcon type={card.type} />}
         {cardKey}
       </span>
-      {card?.archived && <span className="rounded bg-sunken px-1.5 text-[11px] text-fg-muted">Archived</span>}
+      {card?.archived && <span className="rounded bg-sunken px-1.5 text-xs text-fg-muted">Archived</span>}
     </nav>
   );
 }
@@ -115,13 +115,13 @@ function Actions({ card }: { card: Card }) {
   return (
     <>
       <IconButton label="Copy key" onClick={() => copy(card.key)}>
-        <Copy size={14} />
+        <Copy size="0.875rem" />
       </IconButton>
       <IconButton label="Copy link" onClick={() => copy(url)}>
-        <Link2 size={14} />
+        <Link2 size="0.875rem" />
       </IconButton>
       <IconButton label={card.archived ? 'Unarchive' : 'Archive'} onClick={() => patchCard(data, card, { archived: !card.archived })}>
-        {card.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+        {card.archived ? <ArchiveRestore size="0.875rem" /> : <Archive size="0.875rem" />}
       </IconButton>
     </>
   );
@@ -136,15 +136,15 @@ function CardDetail({ card, onOpen }: { card: Card; onOpen: (key: string) => voi
   return (
     <div className="flex flex-col gap-4 px-4 pt-4 pb-10 md:px-6">
       {card.archived && (
-        <div className="flex items-center gap-2 rounded-md bg-sunken px-3 py-2 text-xs text-fg-muted">
-          <Archive size={13} />
+        <div className="flex items-center gap-2 rounded-md bg-sunken px-3 py-2 text-sm text-fg-muted">
+          <Archive size="0.8125rem" />
           <span className="flex-1">This card is archived and hidden from the board.</span>
           <button type="button" className="font-medium text-fg hover:underline" onClick={() => patchCard(data, card, { archived: false })}>
             Unarchive
           </button>
         </div>
       )}
-      <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-[minmax(0,1fr)_272px] md:grid-rows-[auto_1fr]">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-[minmax(0,1fr)_17rem] md:grid-rows-[auto_1fr]">
         <EditableText
           multiline
           label="Title"
@@ -152,14 +152,14 @@ function CardDetail({ card, onOpen }: { card: Card; onOpen: (key: string) => voi
           allowEmpty={false}
           value={card.title}
           onCommit={(title) => patchCard(data, card, { title: title.trim() })}
-          className="text-[20px] leading-tight font-semibold"
+          className="text-xl leading-tight font-semibold"
         />
         <aside aria-label="Properties" className="md:row-span-2 md:border-l md:border-line md:pl-4">
           <Properties card={card} />
         </aside>
         <div className="flex min-w-0 flex-col gap-5 md:col-start-1 md:row-start-2">
           <div className="flex flex-col">
-            <div className="flex h-7 items-center px-2 text-[12px] font-medium text-fg-muted">Description</div>
+            <div className="flex h-7 items-center px-2 text-sm font-medium text-fg-muted">Description</div>
             <Description card={card} />
           </div>
           {card.type !== 'subtask' && <Children card={card} onOpen={onOpen} />}

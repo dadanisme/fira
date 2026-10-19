@@ -67,8 +67,8 @@ export default function BoardPage() {
       <BoardDataProvider project={project} cards={cards} labels={labels}>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <header className="flex h-11 shrink-0 items-center gap-2 px-4">
-            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] font-semibold text-fg-muted">{project.key}</span>
-            <h1 className="truncate text-[14px] font-semibold">{project.name}</h1>
+            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-xs font-semibold text-fg-muted">{project.key}</span>
+            <h1 className="truncate text-md font-semibold">{project.name}</h1>
             <span className="flex-1" />
             <NewCardButton onCreated={onOpen} />
             <Link
@@ -77,7 +77,7 @@ export default function BoardPage() {
               title="Project settings"
               className="inline-flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
             >
-              <Settings size={15} />
+              <Settings size="0.9375rem" />
             </Link>
           </header>
           <FilterBar filters={filters} />
@@ -134,7 +134,7 @@ function NewCardButton({ onCreated }: { onCreated: (key: string) => void }) {
       placement="bottom-end"
       className="w-80 p-3"
       trigger={(props) => (
-        <Button {...props} size="sm" variant="primary" icon={<Plus size={13} />}>
+        <Button {...props} size="sm" variant="primary" icon={<Plus size="0.8125rem" />}>
           New
         </Button>
       )}
@@ -150,11 +150,11 @@ function NewCardButton({ onCreated }: { onCreated: (key: string) => void }) {
                 aria-checked={type === t}
                 onClick={() => setType(t)}
                 className={cx(
-                  'flex h-6 flex-1 items-center justify-center gap-1 rounded text-xs',
+                  'flex h-6 flex-1 items-center justify-center gap-1 rounded text-sm',
                   type === t ? 'bg-surface font-medium text-fg shadow-card' : 'text-fg-muted hover:text-fg',
                 )}
               >
-                {t === 'epic' && <Zap size={12} />}
+                {t === 'epic' && <Zap size="0.75rem" />}
                 {t === 'card' ? 'Card' : 'Epic'}
               </button>
             ))}

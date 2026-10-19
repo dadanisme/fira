@@ -47,10 +47,10 @@ export function Attachments({ card }: { card: Card }) {
   return (
     <Section
       title="Attachments"
-      meta={attachments.length > 0 && <span className="text-[11px] text-fg-faint">{attachments.length}</span>}
+      meta={attachments.length > 0 && <span className="text-xs text-fg-faint">{attachments.length}</span>}
       action={
         <IconButton size="sm" label="Attach files" onClick={() => input.current?.click()} className="size-6">
-          <Paperclip size={13} />
+          <Paperclip size="0.8125rem" />
         </IconButton>
       }
     >
@@ -79,9 +79,9 @@ export function Attachments({ card }: { card: Card }) {
           <button
             type="button"
             onClick={() => input.current?.click()}
-            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-[13px] text-fg-faint hover:bg-hover hover:text-fg-muted"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-base text-fg-faint hover:bg-hover hover:text-fg-muted"
           >
-            <Paperclip size={13} /> Drop files or click to attach
+            <Paperclip size="0.8125rem" /> Drop files or click to attach
           </button>
         ) : (
           <ul className="flex flex-col">
@@ -92,7 +92,7 @@ export function Attachments({ card }: { card: Card }) {
               <li key={u.id} aria-busy="true" className="flex h-10 items-center gap-2 px-2 text-fg-faint">
                 <span className="size-7 shrink-0 animate-pulse rounded bg-sunken" />
                 <span className="truncate">{u.name}</span>
-                <span className="text-xs">Uploading…</span>
+                <span className="text-sm">Uploading…</span>
               </li>
             ))}
           </ul>
@@ -124,7 +124,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
   return (
     <li className="group flex h-10 items-center gap-2 rounded-md px-2 hover:bg-hover">
       <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded bg-sunken text-fg-faint">
-        {isImage && url ? <img src={url} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon size={14} />}
+        {isImage && url ? <img src={url} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon size="0.875rem" />}
       </span>
       <div className="min-w-0 flex-1">
         {url ? (
@@ -134,7 +134,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         ) : (
           <span className="block truncate">{a.name}</span>
         )}
-        <span className="block text-[11px] text-fg-faint" title={absoluteTime(a.createdAt)}>
+        <span className="block text-xs text-fg-faint" title={absoluteTime(a.createdAt)}>
           {formatBytes(a.size)} · {a.uploadedBy.name} · {relativeTime(a.createdAt)}
         </span>
       </div>
@@ -148,7 +148,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         aria-disabled={!url}
         className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100"
       >
-        <Download size={13} />
+        <Download size="0.8125rem" />
       </a>
       <IconButton
         size="sm"
@@ -156,7 +156,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         onClick={remove}
         className="size-6 opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
       >
-        <Trash size={13} />
+        <Trash size="0.8125rem" />
       </IconButton>
     </li>
   );

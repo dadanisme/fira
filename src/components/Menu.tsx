@@ -54,7 +54,7 @@ export function MenuItem({ onSelect, children, icon, selected, danger, disabled,
         if (!keepOpen) close();
       }}
       className={cx(
-        'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none',
+        'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base outline-none',
         'hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50',
         title && 'disabled:pointer-events-none',
         danger ? 'text-danger' : 'text-fg',
@@ -63,7 +63,7 @@ export function MenuItem({ onSelect, children, icon, selected, danger, disabled,
     >
       {icon && <span className="flex w-4 shrink-0 justify-center text-fg-muted">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {selected && <Check size={14} className="shrink-0 text-fg-muted" />}
+      {selected && <Check size="0.875rem" className="shrink-0 text-fg-muted" />}
     </button>
   );
   // Disabled buttons get no hover events; the wrapper carries the tooltip instead.
@@ -81,5 +81,5 @@ export function MenuSeparator() {
 }
 
 export function MenuLabel({ children }: { children: ReactNode }) {
-  return <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-fg-faint">{children}</div>;
+  return <div className="px-2 pt-1.5 pb-1 text-xs font-medium text-fg-faint">{children}</div>;
 }

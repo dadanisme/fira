@@ -15,13 +15,13 @@ export interface BadgeProps {
 export function Badge({ color = 'gray', children, onRemove, className }: BadgeProps) {
   return (
     <span
-      className={cx('inline-flex h-[18px] max-w-full items-center gap-0.5 rounded px-1.5 text-[11px] leading-none font-medium', className)}
+      className={cx('inline-flex h-4.5 max-w-full items-center gap-0.5 rounded px-1.5 text-xs leading-none font-medium', className)}
       style={{ background: `var(--label-${color}-bg)`, color: `var(--label-${color}-fg)` }}
     >
       <span className="truncate">{children}</span>
       {onRemove && (
         <button type="button" aria-label="Remove" onClick={onRemove} className="-mr-1 rounded-sm opacity-60 hover:opacity-100">
-          <X size={12} />
+          <X size="0.75rem" />
         </button>
       )}
     </span>

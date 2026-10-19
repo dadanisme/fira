@@ -53,15 +53,15 @@ export function FilterBar({ filters }: { filters: Filters }) {
         />
       ))}
       {hasActiveFilters(filters) && (
-        <Button size="sm" variant="ghost" icon={<X size={12} />} onClick={() => set(clearFilters(params))}>
+        <Button size="sm" variant="ghost" icon={<X size="0.75rem" />} onClick={() => set(clearFilters(params))}>
           Clear
         </Button>
       )}
       <span className="flex-1" />
-      <Toggle on={filters.subtasks} onChange={(on) => set(withFlag(params, 'subtasks', on))} icon={<ListTree size={13} />}>
+      <Toggle on={filters.subtasks} onChange={(on) => set(withFlag(params, 'subtasks', on))} icon={<ListTree size="0.8125rem" />}>
         Subtasks
       </Toggle>
-      <Toggle on={filters.archived} onChange={(on) => set(withFlag(params, 'archived', on))} icon={<Archive size={13} />}>
+      <Toggle on={filters.archived} onChange={(on) => set(withFlag(params, 'archived', on))} icon={<Archive size="0.8125rem" />}>
         Archived
       </Toggle>
     </div>
@@ -94,7 +94,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (q: string) =
 
   return (
     <label className="flex h-6 w-48 items-center gap-1.5 rounded-md border border-line bg-surface px-2 focus-within:border-accent focus-within:ring-2 focus-within:ring-ring">
-      <Search size={12} className="shrink-0 text-fg-faint" />
+      <Search size="0.75rem" className="shrink-0 text-fg-faint" />
       <input
         type="search"
         aria-label="Search cards"
@@ -107,7 +107,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (q: string) =
             setText('');
           }
         }}
-        className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-faint [&::-webkit-search-cancel-button]:hidden"
+        className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-faint [&::-webkit-search-cancel-button]:hidden"
       />
     </label>
   );
@@ -145,7 +145,7 @@ function MultiFilter({
           {...props}
           type="button"
           className={cx(
-            'inline-flex h-6 max-w-56 items-center gap-1 rounded-md border px-2 text-xs',
+            'inline-flex h-6 max-w-56 items-center gap-1 rounded-md border px-2 text-sm',
             active ? 'border-accent/50 bg-accent-soft text-fg' : 'border-line text-fg-muted hover:bg-hover hover:text-fg',
           )}
         >
@@ -154,13 +154,13 @@ function MultiFilter({
             {summary && ':'}
           </span>
           {summary && <span className="truncate font-medium">{summary}</span>}
-          <ChevronDown size={12} className="shrink-0 opacity-60" />
+          <ChevronDown size="0.75rem" className="shrink-0 opacity-60" />
         </button>
       )}
       className="w-56"
     >
       <Menu>
-        {options.length === 0 && <div className="px-2 py-1.5 text-xs text-fg-faint">{empty ?? 'Nothing to filter by'}</div>}
+        {options.length === 0 && <div className="px-2 py-1.5 text-sm text-fg-faint">{empty ?? 'Nothing to filter by'}</div>}
         {options.map((o) => {
           const on = selected.includes(o.value);
           return (
@@ -193,7 +193,7 @@ function Toggle({ on, onChange, icon, children }: { on: boolean; onChange: (on: 
       aria-pressed={on}
       onClick={() => onChange(!on)}
       className={cx(
-        'inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs',
+        'inline-flex h-6 items-center gap-1 rounded-md px-2 text-sm',
         on ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
       )}
     >

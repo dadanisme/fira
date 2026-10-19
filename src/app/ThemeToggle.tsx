@@ -11,7 +11,7 @@ export function ThemeToggle() {
   const Icon = ICON[preference];
   return (
     <IconButton label={`Theme: ${preference}`} onClick={() => setThemePreference(NEXT[preference])}>
-      <Icon size={15} />
+      <Icon size="0.9375rem" />
     </IconButton>
   );
 }

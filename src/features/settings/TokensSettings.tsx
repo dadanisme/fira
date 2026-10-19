@@ -53,7 +53,7 @@ export function TokensSettings() {
         title="API tokens"
         description={
           <>
-            Personal tokens for agents calling <code className="text-[12px]">/api/v1</code> with <code className="text-[12px]">Authorization: Bearer fira_…</code>.
+            Personal tokens for agents calling <code className="text-sm">/api/v1</code> with <code className="text-sm">Authorization: Bearer fira_…</code>.
             Their changes show up as the token's name.{' '}
             {/* A static page outside the SPA (public/docs/api), so a plain link, not a router Link. */}
             <a href="/docs/api" target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">
@@ -76,16 +76,16 @@ export function TokensSettings() {
 
       <SettingsSection title="Active tokens">
         {error ? (
-          <div className="rounded-lg border border-line px-3 py-3 text-xs">
+          <div className="rounded-lg border border-line px-3 py-3 text-sm">
             <p className="text-danger">Couldn't load tokens: {error}</p>
             <Button size="sm" className="mt-2" onClick={load}>
               Retry
             </Button>
           </div>
         ) : tokens === null ? (
-          slow && <p className="text-xs text-fg-faint">Loading…</p>
+          slow && <p className="text-sm text-fg-faint">Loading…</p>
         ) : active.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-fg-faint">No active tokens</p>
+          <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-sm text-fg-faint">No active tokens</p>
         ) : (
           <RowList>
             {active.map((t) => (
@@ -95,7 +95,7 @@ export function TokensSettings() {
         )}
         {revoked.length > 0 && (
           <div className="mt-3">
-            <button type="button" onClick={() => setShowRevoked((x) => !x)} className="text-xs text-fg-muted hover:text-fg hover:underline">
+            <button type="button" onClick={() => setShowRevoked((x) => !x)} className="text-sm text-fg-muted hover:text-fg hover:underline">
               {showRevoked ? 'Hide' : 'Show'} {revoked.length} revoked
             </button>
             {showRevoked && (
@@ -147,7 +147,7 @@ function CreateForm({ onCreated }: { onCreated: (c: { token: ApiToken; secret: s
             onChange={(e) => setName(e.target.value)}
             className="w-64"
           />
-          <Button type="submit" variant="primary" icon={<Plus size={13} />} disabled={!trimmed || busy}>
+          <Button type="submit" variant="primary" icon={<Plus size="0.8125rem" />} disabled={!trimmed || busy}>
             {busy ? 'Creating…' : 'Create token'}
           </Button>
         </div>
@@ -170,17 +170,17 @@ function SecretNotice({ created, onDone }: { created: { token: ApiToken; secret:
   };
   return (
     <div role="status" className="mb-8 rounded-lg border border-accent/40 bg-accent-soft p-3">
-      <p className="text-[13px] font-medium">Token “{created.token.name}” created</p>
-      <p className="mb-2 text-xs text-fg-muted">Copy the secret now. It won't be shown again.</p>
+      <p className="text-base font-medium">Token “{created.token.name}” created</p>
+      <p className="mb-2 text-sm text-fg-muted">Copy the secret now. It won't be shown again.</p>
       <div className="flex gap-2">
         <input
           readOnly
           aria-label="Token secret"
           value={created.secret}
           onFocus={(e) => e.target.select()}
-          className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 font-mono text-[12px] text-fg outline-none focus:border-accent"
+          className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 font-mono text-sm text-fg outline-none focus:border-accent"
         />
-        <Button icon={copied ? <Check size={13} /> : <Copy size={13} />} onClick={copy}>
+        <Button icon={copied ? <Check size="0.8125rem" /> : <Copy size="0.8125rem" />} onClick={copy}>
           {copied ? 'Copied' : 'Copy'}
         </Button>
         <Button variant="ghost" onClick={onDone}>
@@ -198,12 +198,12 @@ function TokenRow({ token: t, onRevoke }: { token: ApiToken; onRevoke?: () => vo
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium">{t.name}</span>
-          <code className="flex items-center gap-1 text-[11px] text-fg-faint">
-            <KeyRound size={10} />
+          <code className="flex items-center gap-1 text-xs text-fg-faint">
+            <KeyRound size="0.625rem" />
             {t.prefix}…
           </code>
         </div>
-        <div className="text-[11px] text-fg-faint">
+        <div className="text-xs text-fg-faint">
           <span title={absoluteTime(t.createdAt)}>Created {relativeTime(t.createdAt)}</span>
           {' · '}
           <span title={absoluteTime(t.lastUsedAt)}>{t.lastUsedAt ? `Last used ${relativeTime(t.lastUsedAt)}` : 'Never used'}</span>

@@ -30,16 +30,16 @@ export function WorkPage({ card }: { card: Card }) {
     <Section title="Work page">
       {card.pageId ? (
         <div className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover">
-          <span className="flex w-4 shrink-0 justify-center text-fg-muted">{page?.icon ?? <FileText size={14} />}</span>
+          <span className="flex w-4 shrink-0 justify-center text-fg-muted">{page?.icon ?? <FileText size="0.875rem" />}</span>
           <Link to={`/d/${card.pageId}`} className="min-w-0 flex-1 truncate hover:underline">
             {page ? page.title || 'Untitled' : loading ? '' : 'Missing page'}
-            {page?.trashed && <span className="ml-1.5 text-xs text-fg-faint">(in trash)</span>}
+            {page?.trashed && <span className="ml-1.5 text-sm text-fg-faint">(in trash)</span>}
           </Link>
           <Link
             to={`/d/${card.pageId}`}
-            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg"
           >
-            Open <ArrowUpRight size={12} />
+            Open <ArrowUpRight size="0.75rem" />
           </Link>
           <IconButton
             size="sm"
@@ -47,12 +47,12 @@ export function WorkPage({ card }: { card: Card }) {
             className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
             onClick={() => patchCard(data, card, { pageId: null })}
           >
-            <Unlink size={12} />
+            <Unlink size="0.75rem" />
           </IconButton>
         </div>
       ) : (
         <div className="px-2">
-          <Button size="sm" icon={<FilePlus size={13} />} onClick={create} disabled={loading}>
+          <Button size="sm" icon={<FilePlus size="0.8125rem" />} onClick={create} disabled={loading}>
             Create work page
           </Button>
         </div>

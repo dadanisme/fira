@@ -19,8 +19,8 @@ const variants: Record<ButtonVariant, string> = {
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-6 px-2 gap-1 text-xs',
-  md: 'h-7 px-2.5 gap-1.5 text-[13px]',
+  sm: 'h-6 px-2 gap-1 text-sm',
+  md: 'h-7 px-2.5 gap-1.5 text-base',
 };
 
 export function Button({ variant = 'secondary', size = 'md', icon, className, children, type = 'button', ...rest }: ButtonProps) {

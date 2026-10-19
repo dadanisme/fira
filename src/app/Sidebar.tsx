@@ -17,8 +17,8 @@ const DocsTree = lazy(() => import('../features/docs/DocsTree'));
 
 export function Sidebar() {
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-sidebar">
-      <div className="flex h-11 items-center gap-2 px-4 text-[15px] font-semibold tracking-tight">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-sidebar sm:w-60">
+      <div className="flex h-11 items-center gap-2 px-4 text-md font-semibold tracking-tight">
         <Logo size={16} />
         fira
       </div>
@@ -29,7 +29,7 @@ export function Sidebar() {
         </Suspense>
       </nav>
       <div className="flex items-center gap-1 border-t border-line p-2">
-        <SidebarLink to="/settings" icon={<Settings size={15} />} className="flex-1">
+        <SidebarLink to="/settings" icon={<Settings size="0.9375rem" />} className="flex-1">
           Settings
         </SidebarLink>
         <ThemeToggle />
@@ -50,7 +50,7 @@ function ProjectsSection() {
         <Popover
           trigger={(props) => (
             <IconButton {...props} size="sm" label="New project">
-              <Plus size={14} />
+              <Plus size="0.875rem" />
             </IconButton>
           )}
           className="w-72 p-3"
@@ -70,7 +70,7 @@ function ProjectsSection() {
         <SidebarLink
           key={p.id}
           to={`/p/${p.key}`}
-          icon={<span className="font-mono text-[10px] font-semibold text-fg-faint">{p.key.slice(0, 2)}</span>}
+          icon={<span className="font-mono text-2xs font-semibold text-fg-faint">{p.key.slice(0, 2)}</span>}
         >
           {p.name}
         </SidebarLink>
@@ -91,8 +91,8 @@ function UserMenu() {
       )}
     >
       <Menu>
-        <div className="px-2 py-1.5 text-xs text-fg-muted">{user.email}</div>
-        <MenuItem icon={<LogOut size={14} />} onSelect={() => void signOutUser()}>
+        <div className="px-2 py-1.5 text-sm text-fg-muted">{user.email}</div>
+        <MenuItem icon={<LogOut size="0.875rem" />} onSelect={() => void signOutUser()}>
           Sign out
         </MenuItem>
       </Menu>

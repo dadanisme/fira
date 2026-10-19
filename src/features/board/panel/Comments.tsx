@@ -17,7 +17,7 @@ export function Comments({ card }: { card: Card }) {
   const user = useUser();
 
   return (
-    <Section title="Comments" meta={comments.length > 0 && <span className="text-[11px] text-fg-faint">{comments.length}</span>}>
+    <Section title="Comments" meta={comments.length > 0 && <span className="text-xs text-fg-faint">{comments.length}</span>}>
       <ul className="flex flex-col gap-3 px-2 pt-1">
         {comments.map((c) => (
           <CommentItem key={c.id} cardId={card.id} comment={c} mine={c.author.type === 'user' && c.author.id === user.uid} />
@@ -51,10 +51,10 @@ function Composer({ cardId }: { cardId: string }) {
         onCancel={blurActive}
         placeholder="Leave a comment…"
         variant="compact"
-        className="min-h-10 px-2.5 py-2 text-[13px]"
+        className="min-h-10 px-2.5 py-2 text-base"
       />
       <div className="flex items-center justify-end gap-2 px-2 pb-2">
-        <span className="text-[11px] text-fg-faint">⌘↵ to send</span>
+        <span className="text-xs text-fg-faint">⌘↵ to send</span>
         <Button size="sm" variant="primary" disabled={empty} onClick={submit}>
           Comment
         </Button>
@@ -77,7 +77,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
     <li className="group flex gap-2">
       <Avatar actor={c.author} size={20} className="mt-0.5" />
       <div className="min-w-0 flex-1">
-        <div className="flex h-5 items-center gap-1.5 text-[12px]">
+        <div className="flex h-5 items-center gap-1.5 text-sm">
           <span className="font-medium text-fg">{c.author.name}</span>
           <span className="text-fg-faint" title={absoluteTime(c.createdAt)}>
             {relativeTime(c.createdAt)}
@@ -94,7 +94,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
                   setEditing(true);
                 }}
               >
-                <Pencil size={12} />
+                <Pencil size="0.75rem" />
               </IconButton>
               <IconButton
                 size="sm"
@@ -102,7 +102,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
                 className="hover:text-danger"
                 onClick={() => confirm('Delete this comment?') && run(() => deleteComment(cardId, c.id))}
               >
-                <Trash size={12} />
+                <Trash size="0.75rem" />
               </IconButton>
             </span>
           )}
@@ -116,7 +116,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
               onCancel={() => setEditing(false)}
               autoFocus
               variant="compact"
-              className="min-h-10 px-2.5 py-2 text-[13px]"
+              className="min-h-10 px-2.5 py-2 text-base"
             />
             <div className="flex justify-end gap-1 px-2 pb-2">
               <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
@@ -128,7 +128,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
             </div>
           </div>
         ) : (
-          <MarkdownView value={c.body} variant="compact" className="text-[13px] break-words text-fg" />
+          <MarkdownView value={c.body} variant="compact" className="text-base break-words text-fg" />
         )}
       </div>
     </li>

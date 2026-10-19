@@ -19,7 +19,7 @@ export function ConfirmButton({
   }
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="text-xs text-fg-muted">{question}</span>
+      <span className="text-sm text-fg-muted">{question}</span>
       <Button
         size={rest.size}
         variant="danger"

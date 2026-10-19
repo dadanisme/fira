@@ -191,7 +191,7 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
           }}
         />
       )}
-      {uploading > 0 && <div className="pointer-events-none mt-1 text-xs text-fg-faint">Uploading image…</div>}
+      {uploading > 0 && <div className="pointer-events-none mt-1 text-sm text-fg-faint">Uploading image…</div>}
     </div>
   );
 }

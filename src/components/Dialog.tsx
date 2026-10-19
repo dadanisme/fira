@@ -136,7 +136,7 @@ export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, class
         tabIndex={-1}
         className={cx(
           'relative flex h-dvh w-full flex-col bg-bg shadow-popover outline-none',
-          'sm:h-auto sm:max-h-[calc(100dvh-7vh-24px)] sm:rounded-xl',
+          'sm:h-auto sm:max-h-[calc(100dvh-7vh-1.5rem)] sm:rounded-xl',
           'transition-[opacity,translate,scale] motion-reduce:transition-none',
           'starting:translate-y-2 starting:opacity-0 sm:starting:translate-y-1 sm:starting:scale-[0.98]',
           open ? 'duration-150 ease-out' : 'translate-y-2 opacity-0 duration-[120ms] ease-in sm:translate-y-1 sm:scale-[0.98]',

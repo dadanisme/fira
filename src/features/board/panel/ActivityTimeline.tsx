@@ -41,13 +41,13 @@ export function ActivityTimeline({ card }: { card: Card }) {
       <ol className="relative flex flex-col gap-1.5 px-2 pt-1">
         {!all && merged.length > COLLAPSE_AFTER && (
           <li>
-            <button type="button" onClick={() => setAll(true)} className="text-xs text-fg-muted hover:text-fg hover:underline">
+            <button type="button" onClick={() => setAll(true)} className="text-sm text-fg-muted hover:text-fg hover:underline">
               Show {merged.length - COLLAPSE_AFTER} earlier
             </button>
           </li>
         )}
         {shown.map((e) => (
-          <li key={e.id} className="flex items-start gap-2 text-[12px] leading-5 text-fg-muted">
+          <li key={e.id} className="flex items-start gap-2 text-sm leading-5 text-fg-muted">
             <Avatar actor={e.actor} size={16} className="mt-0.5" />
             <span className="min-w-0 flex-1">
               <span className="font-medium text-fg">{e.actor.name}</span> {describe(e, project.fields)}
@@ -59,7 +59,7 @@ export function ActivityTimeline({ card }: { card: Card }) {
             </span>
           </li>
         ))}
-        {merged.length === 0 && <li className="text-xs text-fg-faint">No activity yet</li>}
+        {merged.length === 0 && <li className="text-sm text-fg-faint">No activity yet</li>}
       </ol>
     </Section>
   );

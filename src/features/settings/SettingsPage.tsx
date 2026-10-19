@@ -17,22 +17,22 @@ export default function SettingsPage() {
     <div className="flex min-h-0 flex-1">
       <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-line px-2 py-3">
         <div>
-          <div className="flex h-7 items-center px-2 text-[11px] font-medium text-fg-faint">Projects</div>
+          <div className="flex h-7 items-center px-2 text-xs font-medium text-fg-faint">Projects</div>
           {projects.map((p) => (
-            <Item key={p.id} to={`projects/${p.key}`} icon={<span className="font-mono text-[10px] font-semibold">{p.key.slice(0, 2)}</span>}>
+            <Item key={p.id} to={`projects/${p.key}`} icon={<span className="font-mono text-2xs font-semibold">{p.key.slice(0, 2)}</span>}>
               {p.name}
             </Item>
           ))}
-          <Item to="projects/new" icon={<Plus size={14} />}>
+          <Item to="projects/new" icon={<Plus size="0.875rem" />}>
             New project
           </Item>
         </div>
         <div>
-          <div className="flex h-7 items-center px-2 text-[11px] font-medium text-fg-faint">Workspace</div>
-          <Item to="labels" icon={<Tag size={14} />}>
+          <div className="flex h-7 items-center px-2 text-xs font-medium text-fg-faint">Workspace</div>
+          <Item to="labels" icon={<Tag size="0.875rem" />}>
             Labels
           </Item>
-          <Item to="tokens" icon={<KeyRound size={14} />}>
+          <Item to="tokens" icon={<KeyRound size="0.875rem" />}>
             API tokens
           </Item>
         </div>
@@ -64,7 +64,7 @@ function Item({ to, icon, children }: { to: string; icon: ReactNode; children: R
       end
       className={({ isActive }) =>
         cx(
-          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-[13px]',
+          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-base',
           isActive ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
         )
       }

@@ -32,9 +32,9 @@ export default function TrashPage() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[720px] px-6 pt-12 pb-8">
-        <h1 className="mb-1 flex items-center gap-2 text-[24px] font-bold tracking-tight">
-          <Trash2 size={20} className="text-fg-faint" />
+      <div className="mx-auto max-w-180 px-6 pt-12 pb-8">
+        <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <Trash2 size="1.25rem" className="text-fg-faint" />
           Trash
         </h1>
         <p className="mb-6 text-fg-muted">Restoring a page also restores the subpages trashed with it.</p>
@@ -45,18 +45,18 @@ export default function TrashPage() {
             return (
               <li key={page.id} className="flex min-h-11 items-center gap-3 py-1.5">
                 <span className="flex w-5 justify-center text-fg-faint">
-                  {page.icon ?? (page.isTemplate ? <LayoutTemplate size={15} /> : <FileText size={15} />)}
+                  {page.icon ?? (page.isTemplate ? <LayoutTemplate size="0.9375rem" /> : <FileText size="0.9375rem" />)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <Link to={`/d/${page.id}`} className="block truncate text-[13px] font-medium hover:underline">
+                  <Link to={`/d/${page.id}`} className="block truncate text-base font-medium hover:underline">
                     {pageTitle(page)}
                   </Link>
-                  <div className="text-xs text-fg-faint">
+                  <div className="text-sm text-fg-faint">
                     {page.trashedAt && `Trashed ${timeAgo(page.trashedAt)}`}
                     {n > 0 && ` · ${n} subpage${n === 1 ? '' : 's'}`}
                   </div>
                 </div>
-                <Button size="sm" icon={<RotateCcw size={13} />} onClick={() => restorePage(page, pages).catch(reportError)}>
+                <Button size="sm" icon={<RotateCcw size="0.8125rem" />} onClick={() => restorePage(page, pages).catch(reportError)}>
                   Restore
                 </Button>
                 <ConfirmButton

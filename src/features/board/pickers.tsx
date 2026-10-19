@@ -74,7 +74,7 @@ export function SearchList({
           setActive(0);
         }}
         onKeyDown={onKeyDown}
-        className="h-8 border-b border-line bg-transparent px-2.5 text-[13px] text-fg outline-none placeholder:text-fg-faint"
+        className="h-8 border-b border-line bg-transparent px-2.5 text-base text-fg outline-none placeholder:text-fg-faint"
       />
       <div id={listId} role="listbox" className="flex max-h-72 flex-col overflow-y-auto p-1">
         {shown.map((item, i) => (
@@ -88,17 +88,17 @@ export function SearchList({
             onMouseEnter={() => setActive(i)}
             onClick={() => onPick(item.id)}
             className={cx(
-              'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-[13px] text-fg',
+              'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base text-fg',
               i === index && 'bg-hover',
             )}
           >
             {item.icon && <span className="flex w-4 shrink-0 justify-center text-fg-muted">{item.icon}</span>}
             <span className="min-w-0 flex-1 truncate">{item.label}</span>
-            {item.hint && <span className="shrink-0 text-[11px] text-fg-faint">{item.hint}</span>}
-            {item.selected && <Check size={14} className="shrink-0 text-fg-muted" />}
+            {item.hint && <span className="shrink-0 text-xs text-fg-faint">{item.hint}</span>}
+            {item.selected && <Check size="0.875rem" className="shrink-0 text-fg-muted" />}
           </button>
         ))}
-        {shown.length === 0 && !footer && <div className="px-2 py-1.5 text-xs text-fg-faint">{empty}</div>}
+        {shown.length === 0 && !footer && <div className="px-2 py-1.5 text-sm text-fg-faint">{empty}</div>}
         {footer}
       </div>
     </div>
@@ -155,9 +155,9 @@ export function LabelPicker({
             <button
               type="button"
               onClick={create}
-              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-fg hover:bg-hover"
+              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-base text-fg hover:bg-hover"
             >
-              <Plus size={14} className="text-fg-muted" />
+              <Plus size="0.875rem" className="text-fg-muted" />
               <span className="truncate">
                 Create <strong className="font-medium">“{trimmed}”</strong>
               </span>

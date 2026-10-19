@@ -48,7 +48,7 @@ export function ColumnHeader({
       {...attributes}
       {...(editing ? {} : handleListeners)}
       className={cx(
-        'group/header flex h-9 shrink-0 items-center gap-1 rounded-t-lg px-1.5 text-[12px] font-medium text-fg-muted outline-none',
+        'group/header flex h-9 shrink-0 items-center gap-1 rounded-t-lg px-1.5 text-sm font-medium text-fg-muted outline-none',
         'focus-visible:ring-2 focus-visible:ring-ring',
         !editing && 'cursor-grab active:cursor-grabbing',
       )}
@@ -83,15 +83,15 @@ export function ColumnHeader({
             onPointerDown={(e) => e.stopPropagation()}
             className="size-6 opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
           >
-            <MoreHorizontal size={14} />
+            <MoreHorizontal size="0.875rem" />
           </IconButton>
         )}
       >
         <Menu>
-          <MenuItem icon={<Pencil size={13} />} onSelect={() => setEditing(true)}>
+          <MenuItem icon={<Pencil size="0.8125rem" />} onSelect={() => setEditing(true)}>
             Rename
           </MenuItem>
-          <MenuItem icon={<Trash2 size={13} />} danger disabled={Boolean(blocked)} title={blocked ?? undefined} onSelect={onRemove}>
+          <MenuItem icon={<Trash2 size="0.8125rem" />} danger disabled={Boolean(blocked)} title={blocked ?? undefined} onSelect={onRemove}>
             Delete
           </MenuItem>
         </Menu>
@@ -128,7 +128,7 @@ function RenameInput({ value, onDone }: { value: string; onDone: (name: string |
       onKeyDown={onKeyDown}
       onPointerDown={(e) => e.stopPropagation()}
       onBlur={() => finish(draft)}
-      className="h-6 flex-1 px-1.5 text-[12px] font-medium"
+      className="h-6 flex-1 px-1.5 text-sm font-medium"
     />
   );
 }
@@ -172,15 +172,15 @@ export function AddColumn({ onAdd }: { onAdd: (name: string) => void }) {
             onBlur={() => !name.trim() && close()}
             className="w-full"
           />
-          <p className="px-1 pt-1 text-[11px] text-fg-faint">Enter to add, Esc to cancel</p>
+          <p className="px-1 pt-1 text-xs text-fg-faint">Enter to add, Esc to cancel</p>
         </div>
       ) : (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex h-9 w-full items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium text-fg-faint hover:bg-sunken/70 hover:text-fg-muted"
+          className="flex h-9 w-full items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-fg-faint hover:bg-sunken/70 hover:text-fg-muted"
         >
-          <Plus size={14} /> Add column
+          <Plus size="0.875rem" /> Add column
         </button>
       )}
     </div>

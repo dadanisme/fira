@@ -33,12 +33,14 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../../components/Menu'
 import { Popover } from '../../components/Popover';
 import { preloadMarkdownEditor } from '../../components/MarkdownEditor';
 import { cx } from '../../lib/cx';
+import { remPx } from '../../lib/rem';
 import { addPage, addPageFromTemplate, duplicate, pageTitle } from './actions';
 import { ancestors, childrenMap, dropRank, flatten, project, type FlatItem, type Projection } from './tree';
 
 // Rendered (lazily) in the sidebar below the projects. Keep Tiptap out of this module's imports.
 
-const INDENT = 12;
+/** Indent per tree level, in rem (0.75rem = 12 design px). */
+const INDENT = 0.75;
 const EXPANDED_KEY = 'fira-docs-expanded';
 
 // ------------------------------------------------------------ expanded state (localStorage)
@@ -96,12 +98,12 @@ export default function DocsTree() {
             placement="bottom-end"
             trigger={(props) => (
               <IconButton {...props} size="sm" label="New page">
-                <Plus size={14} />
+                <Plus size="0.875rem" />
               </IconButton>
             )}
           >
             <Menu>
-              <MenuItem icon={<FilePlus2 size={14} />} onSelect={() => create(addPage(pages, null))}>
+              <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => create(addPage(pages, null))}>
                 New page
               </MenuItem>
               {templates.length > 0 && (
@@ -109,7 +111,7 @@ export default function DocsTree() {
                   <MenuSeparator />
                   <MenuLabel>From template</MenuLabel>
                   {templates.map((t) => (
-                    <MenuItem key={t.id} icon={t.icon ?? <LayoutTemplate size={14} />} onSelect={() => create(addPageFromTemplate(pages, t, null))}>
+                    <MenuItem key={t.id} icon={t.icon ?? <LayoutTemplate size="0.875rem" />} onSelect={() => create(addPageFromTemplate(pages, t, null))}>
                       {pageTitle(t)}
                     </MenuItem>
                   ))}
@@ -125,14 +127,14 @@ export default function DocsTree() {
         title="Templates"
         action={
           <IconButton size="sm" label="New template" onClick={() => create(addPage(pages, null, true))}>
-            <Plus size={14} />
+            <Plus size="0.875rem" />
           </IconButton>
         }
       >
         <PageTree pages={pages} templates empty="No templates" />
       </SidebarSection>
       <div className="-mt-2 flex flex-col">
-        <SidebarLink to="/trash" icon={<Trash2 size={14} />}>
+        <SidebarLink to="/trash" icon={<Trash2 size="0.875rem" />}>
           Trash{trashCount > 0 && <span className="ml-1.5 text-fg-faint">{trashCount}</span>}
         </SidebarLink>
       </div>
@@ -155,7 +157,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
     return set;
   }, [stored, pages, activePageId]);
   const items = useMemo(() => flatten(children, expanded, dragId), [children, expanded, dragId]);
-  const projection: Projection | null = dragId && overId ? project(items, dragId, overId, offsetX, INDENT) : null;
+  const projection: Projection | null = dragId && overId ? project(items, dragId, overId, offsetX, INDENT * remPx()) : null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -168,7 +170,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     const id = String(active.id);
     const target = over ? String(over.id) : null;
-    const proj = target ? project(items, id, target, offsetX, INDENT) : null;
+    const proj = target ? project(items, id, target, offsetX, INDENT * remPx()) : null;
     reset();
     if (!target || !proj) return;
     const page = pages.find((p) => p.id === id);
@@ -180,7 +182,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
     updatePageMeta(id, { parentId: proj.parentId, rank }).catch(reportError);
   };
 
-  if (items.length === 0 && !dragId) return <p className="px-2 py-1 text-xs text-fg-faint">{empty}</p>;
+  if (items.length === 0 && !dragId) return <p className="px-2 py-1 text-sm text-fg-faint">{empty}</p>;
 
   const dragged = dragId ? items.find((i) => i.id === dragId) : undefined;
   return (
@@ -210,7 +212,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
       </SortableContext>
       <DragOverlay dropAnimation={null}>
         {dragged && (
-          <div className="flex h-7 items-center gap-2 rounded-md bg-surface px-2 text-[13px] shadow-popover">
+          <div className="flex h-7 items-center gap-2 rounded-md bg-surface px-2 text-base shadow-popover">
             <PageIcon page={dragged.page} />
             <span className="truncate">{pageTitle(dragged.page)}</span>
           </div>
@@ -221,8 +223,8 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
 }
 
 function PageIcon({ page }: { page: Page }) {
-  if (page.icon) return <span className="text-[13px] leading-none">{page.icon}</span>;
-  return page.isTemplate ? <LayoutTemplate size={14} /> : <FileText size={14} />;
+  if (page.icon) return <span className="text-base leading-none">{page.icon}</span>;
+  return page.isTemplate ? <LayoutTemplate size="0.875rem" /> : <FileText size="0.875rem" />;
 }
 
 function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pages: Page[]; depth: number; expanded: boolean; active: boolean }) {
@@ -254,10 +256,10 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
     >
       <div
         className={cx(
-          'flex h-7 min-w-0 items-center gap-1 rounded-md pr-1 text-[13px]',
+          'flex h-7 min-w-0 items-center gap-1 rounded-md pr-1 text-base',
           active ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
         )}
-        style={{ paddingLeft: 4 + depth * INDENT }}
+        style={{ paddingLeft: `${0.25 + depth * INDENT}rem` }}
       >
         <button
           type="button"
@@ -269,7 +271,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
             !item.hasChildren && 'invisible',
           )}
         >
-          <ChevronRight size={13} className={cx('transition-transform', expanded && 'rotate-90')} />
+          <ChevronRight size="0.8125rem" className={cx('transition-transform', expanded && 'rotate-90')} />
         </button>
         <span className="flex w-4 shrink-0 justify-center">
           <PageIcon page={page} />
@@ -287,27 +289,27 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
             onOpenChange={setMenuOpen}
             trigger={(props) => (
               <IconButton {...props} size="sm" label="Page actions" onPointerDown={(e) => e.stopPropagation()}>
-                <MoreHorizontal size={14} />
+                <MoreHorizontal size="0.875rem" />
               </IconButton>
             )}
           >
             <Menu>
-              <MenuItem icon={<Pencil size={14} />} onSelect={() => setRenaming(true)}>
+              <MenuItem icon={<Pencil size="0.875rem" />} onSelect={() => setRenaming(true)}>
                 Rename
               </MenuItem>
-              <MenuItem icon={<Plus size={14} />} onSelect={addChild}>
+              <MenuItem icon={<Plus size="0.875rem" />} onSelect={addChild}>
                 Add subpage
               </MenuItem>
               {page.isTemplate && (
-                <MenuItem icon={<FilePlus2 size={14} />} onSelect={() => navigate(`/d/${addPageFromTemplate(pages, page, null)}`)}>
+                <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => navigate(`/d/${addPageFromTemplate(pages, page, null)}`)}>
                   New page from template
                 </MenuItem>
               )}
-              <MenuItem icon={<Copy size={14} />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
+              <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
                 Duplicate
               </MenuItem>
               <MenuItem
-                icon={page.isTemplate ? <FileText size={14} /> : <LayoutTemplate size={14} />}
+                icon={page.isTemplate ? <FileText size="0.875rem" /> : <LayoutTemplate size="0.875rem" />}
                 onSelect={() => updatePageMeta(page.id, { isTemplate: !page.isTemplate }).catch(reportError)}
               >
                 {page.isTemplate ? 'Convert to page' : 'Convert to template'}
@@ -315,7 +317,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
               <MenuSeparator />
               <MenuItem
                 danger
-                icon={<Trash2 size={14} />}
+                icon={<Trash2 size="0.875rem" />}
                 onSelect={() => {
                   trashPage(page, pages).catch(reportError);
                   if (active) navigate('/trash');
@@ -326,7 +328,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
             </Menu>
           </Popover>
           <IconButton size="sm" label="Add subpage" onClick={addChild} onPointerDown={(e) => e.stopPropagation()}>
-            <Plus size={14} />
+            <Plus size="0.875rem" />
           </IconButton>
         </div>
       </div>
@@ -354,7 +356,7 @@ function RenameInput({ page, onDone }: { page: Page; onDone: () => void }) {
         if (e.key === 'Escape') onDone();
       }}
       placeholder="Untitled"
-      className="h-6 min-w-0 flex-1 rounded border border-line bg-surface px-1.5 text-[13px] text-fg outline-none focus:border-accent"
+      className="h-6 min-w-0 flex-1 rounded border border-line bg-surface px-1.5 text-base text-fg outline-none focus:border-accent"
     />
   );
 }

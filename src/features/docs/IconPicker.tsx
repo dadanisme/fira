@@ -20,7 +20,7 @@ export function IconPicker({
 }) {
   const [custom, setCustom] = useState('');
   return (
-    <Popover trigger={trigger} className="w-[300px] p-2">
+    <Popover trigger={trigger} className="w-75 p-2">
       {({ close }) => (
         <div className="flex flex-col gap-2">
           <div className="grid grid-cols-10 gap-0.5">
@@ -51,7 +51,7 @@ export function IconPicker({
               value={custom}
               onChange={(ev) => setCustom(ev.target.value)}
               placeholder="Any emoji…"
-              className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-[13px] outline-none focus:border-accent"
+              className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 text-base outline-none focus:border-accent"
             />
             {value && (
               <Button

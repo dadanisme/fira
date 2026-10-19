@@ -25,16 +25,16 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-sunken/60" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-[920px] bg-bg shadow-popover">
+      <div className="relative flex h-full w-full max-w-230 bg-bg shadow-popover">
         <div className="flex w-64 shrink-0 flex-col border-r border-line bg-sidebar">
           <div className="flex h-11 items-center justify-between px-3">
-            <span className="text-[13px] font-semibold">Version history</span>
+            <span className="text-base font-semibold">Version history</span>
             <IconButton label="Close" onClick={onClose} className="sm:hidden">
-              <X size={15} />
+              <X size="0.9375rem" />
             </IconButton>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2 pb-2">
-            {!loading && versions.length === 0 && <p className="px-2 text-xs text-fg-faint">No versions yet</p>}
+            {!loading && versions.length === 0 && <p className="px-2 text-sm text-fg-faint">No versions yet</p>}
             {versions.map((v) => (
               <button
                 key={v.id}
@@ -45,8 +45,8 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
                   v.id === selected?.id ? 'bg-active' : 'hover:bg-hover',
                 )}
               >
-                <span className="text-[13px] font-medium text-fg">{timeAgo(v.savedAt)}</span>
-                <span className="flex items-center gap-1.5 text-xs text-fg-muted">
+                <span className="text-base font-medium text-fg">{timeAgo(v.savedAt)}</span>
+                <span className="flex items-center gap-1.5 text-sm text-fg-muted">
                   <Avatar actor={v.actor} size={14} />
                   <span className="truncate">{v.actor.name}</span>
                   <span className="ml-auto text-fg-faint">v{v.version}</span>
@@ -57,7 +57,7 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
-            <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+            <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
               {selected && `${dateTime(selected.savedAt)} · ${selected.actor.name}${selected.actor.type === 'token' ? ' (API)' : ''}`}
             </span>
             {selected && (
@@ -74,13 +74,13 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
               </Button>
             )}
             <IconButton label="Close" onClick={onClose}>
-              <X size={15} />
+              <X size="0.9375rem" />
             </IconButton>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8">
             {selected && (
-              <div className="mx-auto max-w-[720px]">
-                <h1 className="mb-4 text-[28px] leading-tight font-bold tracking-tight">{pageTitle(selected)}</h1>
+              <div className="mx-auto max-w-180">
+                <h1 className="mb-4 text-3xl leading-tight font-bold tracking-tight">{pageTitle(selected)}</h1>
                 <MarkdownView value={selected.content} variant="page" />
               </div>
             )}

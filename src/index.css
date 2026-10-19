@@ -119,17 +119,43 @@
   --shadow-card: var(--card-shadow);
 }
 
+/*
+ * Size. Every dimension is in rem: Tailwind spacing (h-7, px-2, w-72), the type scale below,
+ * icons (size="0.875rem"), avatars, the editor CSS. The root font size (html, below) is the
+ * one knob that scales the whole UI. Values are written in "design px" / 16 (13px = 0.8125rem);
+ * the comments give the rendered size at the current knob (×15/13, body text 15px).
+ * Use these tokens; no text-[Npx] or other hardcoded px sizes (1px borders excepted).
+ */
+@theme {
+  --text-*: initial;
+  --text-2xs: 0.625rem; /* 11.5px: tiny badges, project key chips */
+  --text-xs: 0.6875rem; /* 12.7px: meta, labels, card keys */
+  --text-sm: 0.75rem; /* 13.8px: secondary text, small buttons */
+  --text-base: 0.8125rem; /* 15px: body, inputs, buttons, menus */
+  --text-md: 0.875rem; /* 16.2px: page and section headers */
+  --text-lg: 1rem; /* 18.5px */
+  --text-xl: 1.25rem; /* 23px: card title */
+  --text-2xl: 1.5rem; /* 27.7px */
+  --text-3xl: 1.75rem; /* 32.3px */
+  --text-4xl: 2rem; /* 36.9px: doc title */
+  --text-5xl: 2.75rem; /* 50.8px: doc icon */
+}
+
 @layer base {
   html,
   body,
   #root {
     height: 100%;
   }
+  html {
+    /* The UI size knob: 1rem = 16px × 15/13 ≈ 18.46px, so body text (0.8125rem) is 15px. 100% = the old, compact size. */
+    font-size: calc(100% * 15 / 13);
+  }
   body {
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
   }

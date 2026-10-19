@@ -34,7 +34,7 @@ export function Properties({ card }: { card: Card }) {
         : [];
 
   return (
-    <dl className="grid grid-cols-[112px_minmax(0,1fr)] items-start gap-x-2 gap-y-0.5 text-[13px]">
+    <dl className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-2 gap-y-0.5 text-base">
       <Row label="Status">
         <Popover trigger={(p) => <Value {...p}>{status ? <StatusValue name={status.name} done={status.id === doneId} /> : <Empty />}</Value>}>
           <Menu>
@@ -99,7 +99,7 @@ export function Properties({ card }: { card: Card }) {
                     <EpicTag id={parent.id} title={parent.title} />
                   ) : (
                     <span className="truncate">
-                      <span className="mr-1.5 font-mono text-[11px] text-fg-faint">{parent.key}</span>
+                      <span className="mr-1.5 font-mono text-xs text-fg-faint">{parent.key}</span>
                       {parent.title}
                     </span>
                   )
@@ -171,7 +171,7 @@ function Empty({ text = 'Empty' }: { text?: string }) {
 function StatusValue({ name, done }: { name: string; done: boolean }) {
   return (
     <>
-      <CircleDot size={13} className={done ? 'text-success' : 'text-fg-muted'} />
+      <CircleDot size="0.8125rem" className={done ? 'text-success' : 'text-fg-muted'} />
       <span className="truncate">{name}</span>
     </>
   );
@@ -207,7 +207,7 @@ function DateValue({
             onKeyDown={(e) => {
               if (e.key === 'Enter') close();
             }}
-            className="h-7 rounded-md border border-line bg-surface px-2 text-[13px] text-fg outline-none focus:border-accent"
+            className="h-7 rounded-md border border-line bg-surface px-2 text-base text-fg outline-none focus:border-accent"
           />
           <div className="flex gap-1">
             {(['Today', 'Tomorrow'] as const).map((label, i) => (
@@ -220,7 +220,7 @@ function DateValue({
                   onChange(d.toLocaleDateString('en-CA'));
                   close();
                 }}
-                className="h-6 flex-1 rounded-md text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                className="h-6 flex-1 rounded-md text-sm text-fg-muted hover:bg-hover hover:text-fg"
               >
                 {label}
               </button>
@@ -232,7 +232,7 @@ function DateValue({
                   onChange(null);
                   close();
                 }}
-                className="h-6 flex-1 rounded-md text-xs text-danger hover:bg-hover"
+                className="h-6 flex-1 rounded-md text-sm text-danger hover:bg-hover"
               >
                 Clear
               </button>
@@ -284,7 +284,7 @@ export function FieldEditor({
               title="Open link"
               className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
             >
-              <ExternalLink size={13} />
+              <ExternalLink size="0.8125rem" />
             </a>
           )}
         </div>
@@ -314,7 +314,7 @@ export function FieldEditor({
                 {o}
               </MenuItem>
             ))}
-            {!def.options?.length && <div className="px-2 py-1.5 text-xs text-fg-faint">No options (add them in settings)</div>}
+            {!def.options?.length && <div className="px-2 py-1.5 text-sm text-fg-faint">No options (add them in settings)</div>}
             {current && (
               <>
                 <MenuSeparator />
@@ -352,7 +352,7 @@ export function FieldEditor({
                 </MenuItem>
               );
             })}
-            {!def.options?.length && <div className="px-2 py-1.5 text-xs text-fg-faint">No options (add them in settings)</div>}
+            {!def.options?.length && <div className="px-2 py-1.5 text-sm text-fg-faint">No options (add them in settings)</div>}
           </Menu>
         </Popover>
       );

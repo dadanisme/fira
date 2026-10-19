@@ -74,7 +74,7 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
           onClick={() => setAdding(true)}
           className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
         >
-          <Plus size={14} />
+          <Plus size="0.875rem" />
         </button>
       }
     >
@@ -90,7 +90,7 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
                 aria-label={`${isDone ? 'Reopen' : 'Complete'} ${c.key}`}
                 className="size-3.5 shrink-0 accent-[var(--accent)]"
               />
-              <span className="shrink-0 font-mono text-[11px] text-fg-faint">{c.key}</span>
+              <span className="shrink-0 font-mono text-xs text-fg-faint">{c.key}</span>
               <button
                 type="button"
                 onClick={() => onOpen(c.key)}
@@ -98,8 +98,8 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
               >
                 {c.title || 'Untitled'}
               </button>
-              {c.priority !== 'none' && <PriorityIcon priority={c.priority} size={13} />}
-              <span className="shrink-0 text-[11px] text-fg-faint">{project.columns.find((col) => col.id === c.status)?.name}</span>
+              {c.priority !== 'none' && <PriorityIcon priority={c.priority} size="0.8125rem" />}
+              <span className="shrink-0 text-xs text-fg-faint">{project.columns.find((col) => col.id === c.status)?.name}</span>
             </li>
           );
         })}
@@ -119,7 +119,7 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={onKeyDown}
           onBlur={() => !title.trim() && setAdding(false)}
-          className="mt-0.5 h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px] text-fg outline-none placeholder:text-fg-faint focus:border-accent"
+          className="mt-0.5 h-8 w-full rounded-md border border-line bg-surface px-2 text-base text-fg outline-none placeholder:text-fg-faint focus:border-accent"
         />
       ) : (
         children.length === 0 &&
@@ -127,9 +127,9 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-[13px] text-fg-faint hover:bg-hover hover:text-fg-muted"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-base text-fg-faint hover:bg-hover hover:text-fg-muted"
           >
-            <Plus size={14} /> Add {childType}
+            <Plus size="0.875rem" /> Add {childType}
           </button>
         )
       )}

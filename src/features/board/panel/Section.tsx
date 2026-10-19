@@ -5,7 +5,7 @@ export function Section({ title, meta, action, children }: { title: string; meta
   return (
     <section aria-label={title} className="flex flex-col">
       <div className="flex h-7 items-center gap-2 px-2">
-        <h2 className="text-[12px] font-medium text-fg-muted">{title}</h2>
+        <h2 className="text-sm font-medium text-fg-muted">{title}</h2>
         {meta}
         <span className="flex-1" />
         {action}

@@ -54,7 +54,7 @@ export function ColumnsEditor({ project }: { project: Project }) {
       </DndContext>
       <form onSubmit={add} className="mt-2 flex gap-2">
         <Input aria-label="New column name" placeholder="New column" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
-        <Button type="submit" icon={<Plus size={13} />} disabled={!name.trim()}>
+        <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!name.trim()}>
           Add column
         </Button>
       </form>
@@ -93,13 +93,13 @@ function ColumnRow({
         {...listeners}
         className="flex size-6 cursor-grab items-center justify-center rounded text-fg-faint hover:bg-hover hover:text-fg-muted active:cursor-grabbing"
       >
-        <GripVertical size={14} />
+        <GripVertical size="0.875rem" />
       </button>
       <div className="min-w-0 flex-1">
         <EditableText label="Column name" value={column.name} allowEmpty={false} onCommit={(n) => onRename(n.trim())} />
       </div>
-      {isDone && <span className="rounded bg-[var(--label-green-bg)] px-1.5 text-[11px] text-[var(--label-green-fg)]">Done</span>}
-      <span className="w-16 text-right text-xs text-fg-faint tabular-nums">
+      {isDone && <span className="rounded bg-[var(--label-green-bg)] px-1.5 text-xs text-[var(--label-green-fg)]">Done</span>}
+      <span className="w-16 text-right text-sm text-fg-faint tabular-nums">
         {count} card{count === 1 ? '' : 's'}
       </span>
       <span title={blocked ?? undefined}>
@@ -109,7 +109,7 @@ function ColumnRow({
           onClick={() => confirm(`Delete column “${column.name}”?`) && onDelete()}
           className="hover:text-danger"
         >
-          <Trash size={13} />
+          <Trash size="0.8125rem" />
         </IconButton>
       </span>
     </li>

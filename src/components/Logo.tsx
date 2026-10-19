@@ -1,7 +1,7 @@
 import { cx } from '../lib/cx';
 
 export interface LogoProps {
-  /** Rendered width and height in px. Below 28px the pixel-tuned small variant is used. */
+  /** Width and height in design px (16 = 1rem, rendered in rem). Below 28 the pixel-tuned small variant is used. */
   size?: number;
   /** Accessible name; omit when a visible "fira" wordmark sits next to it. */
   title?: string;
@@ -17,8 +17,8 @@ export function Logo({ size = 20, title, className }: LogoProps) {
   return (
     <svg
       viewBox={small ? '0 0 16 16' : '0 0 64 64'}
-      width={size}
-      height={size}
+      width={`${size / 16}rem`}
+      height={`${size / 16}rem`}
       className={cx('shrink-0', className)}
       role={title ? 'img' : undefined}
       aria-label={title}

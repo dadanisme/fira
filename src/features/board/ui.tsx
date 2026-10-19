@@ -15,7 +15,7 @@ const PRIORITY_COLOR: Record<Priority, string> = {
   urgent: 'text-prio-urgent',
 };
 
-export function PriorityIcon({ priority, size = 14, className }: { priority: Priority; size?: number; className?: string }) {
+export function PriorityIcon({ priority, size = '0.875rem', className }: { priority: Priority; size?: string; className?: string }) {
   const Icon = PRIORITY_ICON[priority];
   return (
     <Icon
@@ -37,17 +37,17 @@ export function EpicTag({ id, title, className }: { id: string; title: string; c
   const color = epicColor(id);
   return (
     <span
-      className={cx('inline-flex h-[18px] max-w-40 items-center gap-1 rounded px-1.5 text-[11px] leading-none font-medium', className)}
+      className={cx('inline-flex h-4.5 max-w-40 items-center gap-1 rounded px-1.5 text-xs leading-none font-medium', className)}
       style={{ background: `var(--label-${color}-bg)`, color: `var(--label-${color}-fg)` }}
       title={`Epic: ${title}`}
     >
-      <Zap size={10} className="shrink-0" />
+      <Zap size="0.625rem" className="shrink-0" />
       <span className="truncate">{title || 'Untitled epic'}</span>
     </span>
   );
 }
 
-export function TypeIcon({ type, size = 13 }: { type: CardType; size?: number }) {
+export function TypeIcon({ type, size = '0.8125rem' }: { type: CardType; size?: string }) {
   if (type === 'epic') return <Zap size={size} aria-label="Epic" role="img" className="shrink-0 text-[var(--label-purple-fg)]" />;
   if (type === 'subtask') return <Square size={size} aria-label="Subtask" role="img" className="shrink-0 text-fg-faint" />;
   return null;
@@ -55,8 +55,8 @@ export function TypeIcon({ type, size = 13 }: { type: CardType; size?: number })
 
 export function ProgressBadge({ done, total }: { done: number; total: number }) {
   return (
-    <span className={cx('inline-flex items-center gap-1 text-[11px] tabular-nums', done === total ? 'text-success' : 'text-fg-faint')}>
-      <SquareCheck size={12} />
+    <span className={cx('inline-flex items-center gap-1 text-xs tabular-nums', done === total ? 'text-success' : 'text-fg-faint')}>
+      <SquareCheck size="0.75rem" />
       {done}/{total}
     </span>
   );
@@ -93,7 +93,7 @@ export function LabelBadges({ names, onRemove, max }: { names: readonly string[]
           {name}
         </Badge>
       ))}
-      {max && names.length > max && <span className="text-[11px] text-fg-faint">+{names.length - max}</span>}
+      {max && names.length > max && <span className="text-xs text-fg-faint">+{names.length - max}</span>}
     </>
   );
 }

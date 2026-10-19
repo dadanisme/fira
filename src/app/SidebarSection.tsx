@@ -6,7 +6,7 @@ import { cx } from '../lib/cx';
 export function SidebarSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section>
-      <div className="group flex h-7 items-center justify-between pr-1 pl-2 text-[11px] font-medium text-fg-faint">
+      <div className="group flex h-7 items-center justify-between pr-1 pl-2 text-xs font-medium text-fg-faint">
         {title}
         {action}
       </div>
@@ -22,7 +22,7 @@ export function SidebarLink({ to, icon, children, className }: { to: string; ico
       to={to}
       className={({ isActive }) =>
         cx(
-          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-[13px]',
+          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-base',
           isActive ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
           className,
         )

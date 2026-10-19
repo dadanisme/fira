@@ -87,7 +87,7 @@ export function Description({ card }: { card: Card }) {
       {conflict && (
         <div
           role="alert"
-          className="mb-2 flex items-center gap-2 rounded-md bg-[var(--label-yellow-bg)] px-2.5 py-1.5 text-xs text-[var(--label-yellow-fg)]"
+          className="mb-2 flex items-center gap-2 rounded-md bg-[var(--label-yellow-bg)] px-2.5 py-1.5 text-sm text-[var(--label-yellow-fg)]"
         >
           <span className="flex-1">The description was changed elsewhere while you were editing.</span>
           <Button size="sm" variant="ghost" onClick={useTheirs}>
@@ -110,7 +110,7 @@ export function Description({ card }: { card: Card }) {
           setFocused(false);
           flush();
         }}
-        className="min-h-12 rounded-md px-2 py-1 text-[13px]"
+        className="min-h-12 rounded-md px-2 py-1 text-base"
       />
     </div>
   );

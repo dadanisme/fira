@@ -81,7 +81,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex h-6 items-center justify-between text-[11px] font-medium text-fg-faint">
+      <div className="flex h-6 items-center justify-between text-xs font-medium text-fg-faint">
         <span>Comments</span>
         {resolvedCount > 0 && (
           <button type="button" onClick={() => props.onShowResolved(!showResolved)} className="rounded px-1 hover:bg-hover hover:text-fg">
@@ -105,20 +105,20 @@ export function CommentsPanel(props: CommentsPanelProps) {
         <div className={cx(!aligned && 'flex flex-col gap-2')}>{anchored.map(card)}</div>
         {orphaned.length > 0 && (
           <div className={cx('flex flex-col gap-2', aligned && 'absolute right-0 left-0')} style={aligned ? { top: orphanTop } : undefined}>
-            <div className="pt-2 text-[11px] font-medium text-fg-faint">Text no longer found</div>
+            <div className="pt-2 text-xs font-medium text-fg-faint">Text no longer found</div>
             {orphaned.map((t) => (
               <ThreadCard key={t.id} pageId={props.pageId} thread={t} active={props.activeId === t.id} onActivate={() => props.onActivate(t.id)} />
             ))}
           </div>
         )}
-        {visible.length === 0 && !pending && <p className="text-xs text-fg-faint">Select text and choose Comment to start a thread.</p>}
+        {visible.length === 0 && !pending && <p className="text-sm text-fg-faint">Select text and choose Comment to start a thread.</p>}
       </div>
     </div>
   );
 }
 
 function Quote({ text }: { text: string }) {
-  return <div className="line-clamp-2 border-l-2 border-warning pl-2 text-xs text-fg-muted italic">{text}</div>;
+  return <div className="line-clamp-2 border-l-2 border-warning pl-2 text-sm text-fg-muted italic">{text}</div>;
 }
 
 function ThreadCard({
@@ -167,17 +167,17 @@ function ThreadCard({
             setThreadResolved(pageId, thread.id, !thread.resolved).catch(reportError);
           }}
         >
-          {thread.resolved ? <RotateCcw size={13} /> : <Check size={14} />}
+          {thread.resolved ? <RotateCcw size="0.8125rem" /> : <Check size="0.875rem" />}
         </IconButton>
       </div>
       {thread.messages.map((m) => (
         <div key={m.id} className="flex flex-col gap-1">
-          <div className="flex items-center gap-1.5 text-xs">
+          <div className="flex items-center gap-1.5 text-sm">
             <Avatar actor={m.author} size={16} />
             <span className="font-medium">{m.author.name}</span>
             <span className="text-fg-faint">{timeAgo(m.createdAt)}</span>
           </div>
-          <MarkdownView value={m.body} className="pl-[22px]" />
+          <MarkdownView value={m.body} className="pl-5.5" />
         </div>
       ))}
       {active &&
@@ -188,7 +188,7 @@ function ThreadCard({
               e.stopPropagation();
               setReply('');
             }}
-            className="h-7 rounded-md border border-line px-2 text-left text-xs text-fg-faint hover:bg-hover"
+            className="h-7 rounded-md border border-line px-2 text-left text-sm text-fg-faint hover:bg-hover"
           >
             Reply…
           </button>

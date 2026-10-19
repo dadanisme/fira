@@ -62,11 +62,11 @@ export function NewProjectForm({ onCreated }: { onCreated: (key: string) => void
         </Button>
       </div>
       {message ? (
-        <p id="new-project-error" className="text-xs text-danger">
+        <p id="new-project-error" className="text-sm text-danger">
           {message}
         </p>
       ) : (
-        <p className="text-xs text-fg-faint">Cards will be keyed {effectiveKey || 'KEY'}-1, {effectiveKey || 'KEY'}-2, …</p>
+        <p className="text-sm text-fg-faint">Cards will be keyed {effectiveKey || 'KEY'}-1, {effectiveKey || 'KEY'}-2, …</p>
       )}
     </form>
   );

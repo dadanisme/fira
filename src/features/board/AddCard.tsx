@@ -51,16 +51,16 @@ export function AddCard({ columnId, lastRank, visibleIds }: { columnId: string; 
             onBlur={() => {
               if (!title.trim()) setOpen(false);
             }}
-            className="field-sizing-content block w-full resize-none bg-transparent text-[13px] leading-snug text-fg outline-none placeholder:text-fg-faint"
+            className="field-sizing-content block w-full resize-none bg-transparent text-base leading-snug text-fg outline-none placeholder:text-fg-faint"
           />
         </div>
       ) : (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] text-fg-faint hover:bg-hover hover:text-fg-muted"
+          className="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md px-1.5 text-sm text-fg-faint hover:bg-hover hover:text-fg-muted"
         >
-          <Plus size={14} /> Add card
+          <Plus size="0.875rem" /> Add card
         </button>
       )}
     </>
@@ -72,11 +72,11 @@ export function PendingTile({ title, type, className }: { title: string; type?: 
     <div
       aria-busy="true"
       className={cx(
-        'mt-1.5 rounded-md border border-dashed border-line bg-surface px-2.5 py-2 text-[13px] leading-snug text-fg-muted',
+        'mt-1.5 rounded-md border border-dashed border-line bg-surface px-2.5 py-2 text-base leading-snug text-fg-muted',
         className,
       )}
     >
-      <div className="text-[11px] text-fg-faint">{type === 'epic' ? 'New epic…' : 'Creating…'}</div>
+      <div className="text-xs text-fg-faint">{type === 'epic' ? 'New epic…' : 'Creating…'}</div>
       {title}
     </div>
   );

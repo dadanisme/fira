@@ -32,6 +32,7 @@ import { MarkdownEditor, MarkdownView, type CommentAnchor, type MarkdownEditorHa
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu';
 import { Popover } from '../../components/Popover';
 import { cx } from '../../lib/cx';
+import { remPx } from '../../lib/rem';
 import { duplicate, pageTitle } from './actions';
 import { CommentsPanel, type PendingAnchor } from './CommentsPanel';
 import { ConfirmButton } from './ConfirmButton';
@@ -50,7 +51,7 @@ export default function DocPage() {
     if (loading) return null;
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-fg-muted">
-        <FileText size={20} className="text-fg-faint" />
+        <FileText size="1.25rem" className="text-fg-faint" />
         Page not found
       </div>
     );
@@ -58,15 +59,16 @@ export default function DocPage() {
   return <PageView key={page.id} page={page} pages={pages} />;
 }
 
-const WIDE = '(min-width: 1180px)';
+/** Room for the article plus the comments aside: 73.75rem (1180 design px), in px for the current root font size. */
+const wideQuery = () => `(min-width: ${73.75 * remPx()}px)`;
 function useWide(): boolean {
   return useSyncExternalStore(
     (l) => {
-      const m = matchMedia(WIDE);
+      const m = matchMedia(wideQuery());
       m.addEventListener('change', l);
       return () => m.removeEventListener('change', l);
     },
-    () => matchMedia(WIDE).matches,
+    () => matchMedia(wideQuery()).matches,
   );
 }
 
@@ -158,15 +160,15 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
     <div className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
       <header className="flex h-11 shrink-0 items-center gap-2 px-3">
-        <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-[13px] text-fg-muted">
-          {page.isTemplate && <LayoutTemplate size={13} className="mr-1 shrink-0 text-fg-faint" />}
+        <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-base text-fg-muted">
+          {page.isTemplate && <LayoutTemplate size="0.8125rem" className="mr-1 shrink-0 text-fg-faint" />}
           {crumbs.map((c) => (
             <span key={c.id} className="flex min-w-0 items-center gap-0.5">
               <Link to={`/d/${c.id}`} className="max-w-40 truncate rounded px-1 py-0.5 hover:bg-hover hover:text-fg">
                 {c.icon && <span className="mr-1">{c.icon}</span>}
                 {pageTitle(c)}
               </Link>
-              <ChevronRight size={12} className="shrink-0 text-fg-faint" />
+              <ChevronRight size="0.75rem" className="shrink-0 text-fg-faint" />
             </span>
           ))}
           <span className="truncate px-1 text-fg">
@@ -177,10 +179,10 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             <Link
               to={`/p/${card.key.split('-')[0]}/${card.key}`}
               title={card.title}
-              className="ml-2 inline-flex h-5 max-w-56 shrink-0 items-center gap-1 rounded px-1.5 text-[11px] font-medium"
+              className="ml-2 inline-flex h-5 max-w-56 shrink-0 items-center gap-1 rounded px-1.5 text-xs font-medium"
               style={{ background: 'var(--label-blue-bg)', color: 'var(--label-blue-fg)' }}
             >
-              <SquareKanban size={12} />
+              <SquareKanban size="0.75rem" />
               <span className="font-mono">{card.key}</span>
               <span className="truncate font-normal">{card.title}</span>
             </Link>
@@ -190,30 +192,30 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         {!wide && (
           <IconButton label="Comments" active={commentsOpen} onClick={() => setCommentsOpen(!commentsOpen)}>
             <span className="relative">
-              <MessageSquare size={15} />
+              <MessageSquare size="0.9375rem" />
               {openThreads > 0 && (
-                <span className="absolute -top-1.5 -right-2 rounded-full bg-accent px-1 text-[9px] leading-[13px] font-semibold text-accent-fg">{openThreads}</span>
+                <span className="absolute -top-1.5 -right-2 rounded-full bg-accent px-1 text-2xs leading-3.5 font-semibold text-accent-fg">{openThreads}</span>
               )}
             </span>
           </IconButton>
         )}
         <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
-          <History size={15} />
+          <History size="0.9375rem" />
         </IconButton>
         <Popover
           placement="bottom-end"
           trigger={(props) => (
             <IconButton {...props} label="More">
-              <MoreHorizontal size={15} />
+              <MoreHorizontal size="0.9375rem" />
             </IconButton>
           )}
         >
           <Menu>
-            <MenuItem icon={<Copy size={14} />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
+            <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
               Duplicate
             </MenuItem>
             <MenuItem
-              icon={page.isTemplate ? <FileText size={14} /> : <LayoutTemplate size={14} />}
+              icon={page.isTemplate ? <FileText size="0.875rem" /> : <LayoutTemplate size="0.875rem" />}
               onSelect={() => updatePageMeta(page.id, { isTemplate: !page.isTemplate }).catch(reportError)}
             >
               {page.isTemplate ? 'Convert to page' : 'Convert to template'}
@@ -221,7 +223,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             {!page.trashed && (
               <>
                 <MenuSeparator />
-                <MenuItem danger icon={<Trash2 size={14} />} onSelect={() => trashPage(page, pages).catch(reportError)}>
+                <MenuItem danger icon={<Trash2 size="0.875rem" />} onSelect={() => trashPage(page, pages).catch(reportError)}>
                   Move to trash
                 </MenuItem>
               </>
@@ -231,8 +233,8 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       </header>
 
       {save.conflict && (
-        <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-[13px]">
-          <AlertTriangle size={15} className="shrink-0 text-warning" />
+        <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-base">
+          <AlertTriangle size="0.9375rem" className="shrink-0 text-warning" />
           <span className="min-w-0 flex-1">
             <span className="font-medium">{save.conflict.updatedBy.name}</span> changed this page while you were editing. Your edits are not saved yet.
           </span>
@@ -246,8 +248,8 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       )}
 
       {page.trashed && (
-        <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--label-red-bg)] px-3 py-2 text-[13px] text-[var(--label-red-fg)]">
-          <Trash2 size={14} className="shrink-0" />
+        <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--label-red-bg)] px-3 py-2 text-base text-[var(--label-red-fg)]">
+          <Trash2 size="0.875rem" className="shrink-0" />
           <span className="flex-1">This page is in the trash.</span>
           <Button size="sm" onClick={() => restorePage(page, pages).catch(reportError)}>
             Restore
@@ -269,14 +271,14 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative flex justify-center gap-10 px-6 sm:px-12">
-          <article className="w-full max-w-[720px] min-w-0 pt-12 pb-4">
+          <article className="w-full max-w-180 min-w-0 pt-12 pb-4">
             <div className="group/head">
               {page.icon ? (
                 <IconPicker
                   value={page.icon}
                   onChange={setIcon}
                   trigger={(props) => (
-                    <button {...props} type="button" className="mb-2 -ml-1 rounded-lg p-1 text-[44px] leading-none hover:bg-hover">
+                    <button {...props} type="button" className="mb-2 -ml-1 rounded-lg p-1 text-5xl leading-none hover:bg-hover">
                       {page.icon}
                     </button>
                   )}
@@ -286,7 +288,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                   <IconPicker
                     onChange={setIcon}
                     trigger={(props) => (
-                      <Button {...props} variant="ghost" size="sm" icon={<SmilePlus size={14} />}>
+                      <Button {...props} variant="ghost" size="sm" icon={<SmilePlus size="0.875rem" />}>
                         Add icon
                       </Button>
                     )}
@@ -306,15 +308,15 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                 }}
                 placeholder="Untitled"
                 aria-label="Title"
-                className="field-sizing-content w-full resize-none bg-transparent text-[32px] leading-tight font-bold tracking-tight text-fg outline-none placeholder:text-fg-faint"
+                className="field-sizing-content w-full resize-none bg-transparent text-4xl leading-tight font-bold tracking-tight text-fg outline-none placeholder:text-fg-faint"
               />
             </div>
 
             {!page.isTemplate && !page.trashed && save.content.trim() === '' && templates.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-fg-faint">
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-sm text-fg-faint">
                 <span className="mr-1">Start from a template:</span>
                 {templates.slice(0, 6).map((t) => (
-                  <Button key={t.id} size="sm" icon={t.icon ? <span>{t.icon}</span> : <LayoutTemplate size={13} />} onClick={() => applyTemplate(t)}>
+                  <Button key={t.id} size="sm" icon={t.icon ? <span>{t.icon}</span> : <LayoutTemplate size="0.8125rem" />} onClick={() => applyTemplate(t)}>
                     {pageTitle(t)}
                   </Button>
                 ))}
@@ -341,7 +343,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             </div>
           </article>
           {showAside && (
-            <aside className="w-72 shrink-0 pb-8" style={{ paddingTop: Math.max(0, editorTop - 32) }}>
+            <aside className="w-72 shrink-0 pb-8" style={{ paddingTop: Math.max(0, editorTop - 2 * remPx()) }}>
               <CommentsPanel {...panelProps} aligned />
             </aside>
           )}
@@ -352,7 +354,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         <div className="absolute inset-y-0 right-0 z-30 flex w-80 max-w-full flex-col border-l border-line bg-bg shadow-popover">
           <div className="flex h-11 shrink-0 items-center justify-end px-2">
             <IconButton label="Close comments" onClick={() => setCommentsOpen(false)}>
-              <ChevronRight size={15} />
+              <ChevronRight size="0.9375rem" />
             </IconButton>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
@@ -369,7 +371,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
 function SaveStatus({ status }: { status: ReturnType<typeof useAutosave>['status'] }) {
   if (status === 'idle') return null;
   return (
-    <span className={cx('shrink-0 px-1 text-xs', status === 'error' ? 'text-danger' : 'text-fg-faint')}>
+    <span className={cx('shrink-0 px-1 text-sm', status === 'error' ? 'text-danger' : 'text-fg-faint')}>
       {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : "Couldn't save"}
     </span>
   );

@@ -42,19 +42,19 @@ export function LabelsSettings() {
           ))}
         </RowList>
       ) : (
-        <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-fg-faint">
+        <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-sm text-fg-faint">
           No labels yet. Create them here or on the fly from a card.
         </p>
       )}
       <form onSubmit={add} className="mt-3 flex flex-col gap-2">
         <div className="flex gap-2">
           <Input aria-label="New label name" placeholder="New label" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
-          <Button type="submit" icon={<Plus size={13} />} disabled={!trimmed || Boolean(clash)}>
+          <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!trimmed || Boolean(clash)}>
             Add label
           </Button>
           {trimmed && <Badge color={color ?? colorFor(trimmed)}>{trimmed}</Badge>}
         </div>
-        {trimmed && (clash ? <p className="text-xs text-danger">“{clash.name}” already exists</p> : <ColorSwatches value={color ?? colorFor(trimmed)} onChange={setColor} />)}
+        {trimmed && (clash ? <p className="text-sm text-danger">“{clash.name}” already exists</p> : <ColorSwatches value={color ?? colorFor(trimmed)} onChange={setColor} />)}
       </form>
     </>
   );
@@ -83,7 +83,7 @@ function LabelRow({ label, labels }: { label: Label; labels: readonly Label[] })
               run(() => setLabelColor(label.id, c));
               close();
             }}
-            className="w-[124px]"
+            className="w-31"
           />
         )}
       </Popover>
@@ -96,7 +96,7 @@ function LabelRow({ label, labels }: { label: Label; labels: readonly Label[] })
         className="hover:text-danger"
         onClick={() => confirm(`Delete label “${label.name}”? It is removed from every card.`) && run(() => deleteLabel(label))}
       >
-        <Trash size={13} />
+        <Trash size="0.8125rem" />
       </IconButton>
     </li>
   );

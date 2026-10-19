@@ -28,7 +28,7 @@ function ToolButton({ label, active, onClick, children }: { label: string; activ
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cx(
-        'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-[12px] text-fg-muted hover:bg-hover hover:text-fg',
+        'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg',
         active && 'bg-active text-fg',
       )}
     >
@@ -95,27 +95,27 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
               }
             }}
             placeholder="Paste a link…"
-            className="h-6 w-56 rounded bg-transparent px-1.5 text-[12px] text-fg outline-none placeholder:text-fg-faint"
+            className="h-6 w-56 rounded bg-transparent px-1.5 text-sm text-fg outline-none placeholder:text-fg-faint"
           />
           {state.link && (
             <ToolButton label="Remove link" onClick={() => (setHref(''), editor.chain().focus().extendMarkRange('link').unsetLink().run(), setLinking(false))}>
-              <Unlink size={14} />
+              <Unlink size="0.875rem" />
             </ToolButton>
           )}
         </form>
       ) : (
         <>
           <ToolButton label="Bold" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
-            <Bold size={14} />
+            <Bold size="0.875rem" />
           </ToolButton>
           <ToolButton label="Italic" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
-            <Italic size={14} />
+            <Italic size="0.875rem" />
           </ToolButton>
           <ToolButton label="Strikethrough" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()}>
-            <Strikethrough size={14} />
+            <Strikethrough size="0.875rem" />
           </ToolButton>
           <ToolButton label="Inline code" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
-            <Code size={14} />
+            <Code size="0.875rem" />
           </ToolButton>
           <ToolButton
             label="Link"
@@ -125,13 +125,13 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
               setLinking(true);
             }}
           >
-            <Link2 size={14} />
+            <Link2 size="0.875rem" />
           </ToolButton>
           {onComment && (
             <>
               <Divider />
               <ToolButton label="Comment" onClick={onComment}>
-                <MessageSquarePlus size={14} />
+                <MessageSquarePlus size="0.875rem" />
                 <span>Comment</span>
               </ToolButton>
             </>
@@ -163,20 +163,20 @@ export function TableBubble({ editor }: { editor: Editor }) {
       className="z-40 flex items-center gap-0.5 rounded-lg bg-surface p-0.5 shadow-popover"
     >
       <ToolButton label="Add row below" onClick={() => editor.chain().focus().addRowAfter().run()}>
-        <BetweenHorizontalEnd size={14} />
+        <BetweenHorizontalEnd size="0.875rem" />
       </ToolButton>
       <ToolButton label="Add column right" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-        <BetweenVerticalEnd size={14} />
+        <BetweenVerticalEnd size="0.875rem" />
       </ToolButton>
       <Divider />
       <ToolButton label="Delete row" onClick={() => editor.chain().focus().deleteRow().run()}>
-        <Rows3 size={14} />
+        <Rows3 size="0.875rem" />
       </ToolButton>
       <ToolButton label="Delete column" onClick={() => editor.chain().focus().deleteColumn().run()}>
-        <Columns3 size={14} />
+        <Columns3 size="0.875rem" />
       </ToolButton>
       <ToolButton label="Delete table" onClick={() => editor.chain().focus().deleteTable().run()}>
-        <Trash2 size={14} />
+        <Trash2 size="0.875rem" />
       </ToolButton>
     </BubbleMenu>
   );

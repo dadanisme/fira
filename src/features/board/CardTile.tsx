@@ -80,20 +80,20 @@ export const CardTile = memo(function CardTile({
         card.archived && 'opacity-60',
       )}
     >
-      <div className="flex items-center gap-1.5 text-[11px] text-fg-faint">
-        <TypeIcon type={card.type} size={12} />
+      <div className="flex items-center gap-1.5 text-xs text-fg-faint">
+        <TypeIcon type={card.type} size="0.75rem" />
         <span className="font-mono">{card.key}</span>
         {parentKey && (
           <span className="flex items-center gap-0.5 font-mono">
-            <CornerDownRight size={10} />
+            <CornerDownRight size="0.625rem" />
             {parentKey}
           </span>
         )}
-        {card.archived && <Archive size={11} aria-label="Archived" />}
+        {card.archived && <Archive size="0.6875rem" aria-label="Archived" />}
         <span className="flex-1" />
-        {card.priority !== 'none' && <PriorityIcon priority={card.priority} size={13} />}
+        {card.priority !== 'none' && <PriorityIcon priority={card.priority} size="0.8125rem" />}
       </div>
-      <div className={cx('mt-0.5 text-[13px] leading-snug break-words text-fg', done && 'text-fg-muted')}>
+      <div className={cx('mt-0.5 text-base leading-snug break-words text-fg', done && 'text-fg-muted')}>
         {card.title || <span className="text-fg-faint">Untitled</span>}
       </div>
       {(card.labels.length > 0 || due || epic || progressTotal > 0) && (
@@ -103,12 +103,12 @@ export const CardTile = memo(function CardTile({
           {due && (
             <span
               className={cx(
-                'inline-flex h-[18px] items-center gap-1 rounded px-1 text-[11px]',
+                'inline-flex h-4.5 items-center gap-1 rounded px-1 text-xs',
                 overdue ? 'bg-[var(--label-red-bg)] text-[var(--label-red-fg)]' : dueToday ? 'text-warning' : 'text-fg-muted',
               )}
               title={overdue ? `Overdue: ${due}` : `Due ${due}`}
             >
-              <Calendar size={11} />
+              <Calendar size="0.6875rem" />
               {formatDate(due)}
             </span>
           )}

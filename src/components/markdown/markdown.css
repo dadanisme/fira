@@ -1,4 +1,4 @@
-/* Rendered Markdown, shared by the editor (.ProseMirror.md) and MarkdownView (.md). Tokens from src/index.css. */
+/* Rendered Markdown, shared by the editor (.ProseMirror.md) and MarkdownView (.md). Tokens from src/index.css; sizes in rem/em. */
 
 .md {
   color: var(--fg);
@@ -6,11 +6,11 @@
   word-break: break-word;
 }
 .md-compact {
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.55;
 }
 .md-page {
-  font-size: 15px;
+  font-size: 0.9375rem; /* reading size, 17.3px at the default knob */
   line-height: 1.65;
 }
 
@@ -73,14 +73,14 @@
   color: var(--accent);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  text-underline-offset: 2px;
+  text-underline-offset: 0.125rem;
   cursor: pointer;
 }
 .md code {
   font-family: var(--font-mono);
   font-size: 0.86em;
   padding: 0.12em 0.32em;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   background: var(--sunken);
   border: 1px solid var(--line);
 }
@@ -90,7 +90,7 @@
   line-height: 1.55;
   margin: 0.6em 0;
   padding: 0.75em 0.9em;
-  border-radius: 6px;
+  border-radius: 0.375rem;
   background: var(--sunken);
   border: 1px solid var(--line);
   overflow-x: auto;
@@ -151,8 +151,8 @@
   min-width: 0;
 }
 .md ul[data-type='taskList'] input[type='checkbox'] {
-  width: 14px;
-  height: 14px;
+  width: 0.875rem;
+  height: 0.875rem;
   accent-color: var(--accent);
   cursor: pointer;
   margin: 0;
@@ -181,7 +181,7 @@
   max-width: 100%;
   height: auto;
   margin: 0.6em 0;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .md img.ProseMirror-selectednode {
   outline: 2px solid var(--accent);
@@ -226,7 +226,7 @@
 .md .md-card-chip {
   display: inline-block;
   padding: 0 0.35em;
-  border-radius: 4px;
+  border-radius: 0.25rem;
   font-family: var(--font-mono);
   font-size: 0.86em;
   font-weight: 500;
