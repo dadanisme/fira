@@ -81,7 +81,7 @@ export function CommentsPanel(props: CommentsPanelProps) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex h-6 items-center justify-between text-xs font-medium text-fg-faint">
+      <div className="sticky top-0 z-10 -mx-1 flex h-6 items-center justify-between bg-bg px-1 text-xs font-medium text-fg-faint">
         <span>Comments</span>
         {resolvedCount > 0 && (
           <button type="button" onClick={() => props.onShowResolved(!showResolved)} className="rounded px-1 hover:bg-hover hover:text-fg">
