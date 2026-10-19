@@ -82,7 +82,7 @@ export const CardTile = memo(function CardTile({
     >
       <div className="flex items-center gap-1.5 text-xs text-fg-faint">
         <TypeIcon type={card.type} size="0.75rem" />
-        <span className="font-mono">{card.key}</span>
+        <span className="whitespace-nowrap font-mono">{card.key}</span>
         {parentKey && (
           <span className="flex items-center gap-0.5 font-mono">
             <CornerDownRight size="0.625rem" />

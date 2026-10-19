@@ -99,7 +99,7 @@ export function Properties({ card }: { card: Card }) {
                     <EpicTag id={parent.id} title={parent.title} />
                   ) : (
                     <span className="truncate">
-                      <span className="mr-1.5 font-mono text-xs text-fg-faint">{parent.key}</span>
+                      <span className="mr-1.5 whitespace-nowrap font-mono text-xs text-fg-faint">{parent.key}</span>
                       {parent.title}
                     </span>
                   )

@@ -231,6 +231,7 @@
   font-size: 0.86em;
   font-weight: 500;
   line-height: 1.5;
+  white-space: nowrap;
   color: var(--label-blue-fg);
   background: var(--label-blue-bg);
   text-decoration: none;

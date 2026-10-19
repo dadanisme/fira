@@ -224,7 +224,7 @@ export function CardPicker({
       label: c.title || 'Untitled',
       text: `${c.key} ${c.title}`,
       icon: <TypeIcon type={c.type} />,
-      hint: <span className="font-mono">{c.key}</span>,
+      hint: <span className="whitespace-nowrap font-mono">{c.key}</span>,
       selected: c.id === selectedId,
     })),
   ];

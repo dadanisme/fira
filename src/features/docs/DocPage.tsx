@@ -179,12 +179,11 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             <Link
               to={`/p/${card.key.split('-')[0]}/${card.key}`}
               title={card.title}
-              className="ml-2 inline-flex h-5 max-w-56 shrink-0 items-center gap-1 rounded px-1.5 text-xs font-medium"
+              className="ml-2 inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-xs font-medium"
               style={{ background: 'var(--label-blue-bg)', color: 'var(--label-blue-fg)' }}
             >
-              <SquareKanban size="0.75rem" />
+              <SquareKanban size="0.75rem" className="shrink-0" />
               <span className="font-mono">{card.key}</span>
-              <span className="truncate font-normal">{card.title}</span>
             </Link>
           )}
         </nav>
