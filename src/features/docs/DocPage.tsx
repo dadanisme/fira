@@ -102,6 +102,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ anchor: PendingAnchor; top: number } | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [asideHidden, setAsideHidden] = useState(false);
   const visibleThreads = useMemo(() => threads.filter((t) => showResolved || !t.resolved), [threads, showResolved]);
   const anchors = useMemo<CommentAnchor[]>(
     () => visibleThreads.map(({ id, quote, prefix, suffix }) => ({ id, quote, prefix, suffix })),
@@ -128,6 +129,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       const base = editorBox.current?.getBoundingClientRect().top ?? 0;
       setPending({ anchor, top: rect ? Math.max(0, rect.top - base) : 0 });
       setActiveId(null);
+      setAsideHidden(false);
       if (!wide) setCommentsOpen(true);
     },
     [wide],
@@ -137,6 +139,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
     (id: string | null) => {
       setActiveId(id);
       if (!id) return;
+      setAsideHidden(false);
       if (!wide) setCommentsOpen(true);
       document.querySelector(`[data-thread-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     },
@@ -157,7 +160,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       if (id) setActiveId(id);
     },
   };
-  const showAside = wide && (visibleThreads.length > 0 || pending !== null || threads.length > 0);
+  const showAside = wide && !asideHidden && (visibleThreads.length > 0 || pending !== null || threads.length > 0);
 
   // ------------------------------------------------ misc
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -206,16 +209,20 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         </nav>
         <Presence people={present} />
         <SaveStatus status={save.status} />
-        {!wide && (
-          <IconButton label="Comments" active={commentsOpen} onClick={() => setCommentsOpen(!commentsOpen)}>
-            <span className="relative">
-              <MessageSquare size="0.9375rem" />
-              {openThreads > 0 && (
-                <span className="absolute -top-1.5 -right-2 rounded-full bg-accent px-1 text-2xs leading-3.5 font-semibold text-accent-fg">{openThreads}</span>
-              )}
-            </span>
-          </IconButton>
-        )}
+        <IconButton
+          label={wide ? (asideHidden ? 'Show comments' : 'Hide comments') : 'Comments'}
+          active={wide ? !asideHidden && showAside : commentsOpen}
+          onClick={() => (wide ? setAsideHidden(!asideHidden) : setCommentsOpen(!commentsOpen))}
+        >
+          <span className="relative">
+            <MessageSquare size="0.9375rem" />
+            {visibleThreads.length > 0 && (
+              <span className="absolute -top-1.5 -right-2 rounded-full bg-accent px-1 text-2xs leading-3.5 font-semibold text-accent-fg">
+                {visibleThreads.length}
+              </span>
+            )}
+          </span>
+        </IconButton>
         {resolvedThreads > 0 && (
           <IconButton
             label={showResolved ? 'Hide resolved comments' : `Show resolved comments (${resolvedThreads})`}
@@ -377,7 +384,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             </div>
           </article>
           {showAside && (
-            <aside className="w-72 shrink-0 pb-8" style={{ paddingTop: Math.max(0, editorTop - 2 * remPx()) }}>
+            <aside className="w-72 shrink-0 pb-8" style={{ paddingTop: editorTop }}>
               <CommentsPanel {...panelProps} aligned />
             </aside>
           )}

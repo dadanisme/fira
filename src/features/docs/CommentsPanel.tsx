@@ -81,11 +81,8 @@ export function CommentsPanel(props: CommentsPanelProps) {
   );
 
   return (
-    // Aligned: fill the aside (the article's height) so the sticky header stays up for the whole page.
-    <div className={cx('flex flex-col gap-2', aligned && 'min-h-full')}>
-      <div className="sticky top-0 z-10 -mx-1 flex h-6 items-center justify-between bg-bg px-1 text-xs font-medium text-fg-faint">
-        <span>Comments{visible.length > 0 && ` · ${visible.length}`}</span>
-      </div>
+    // The title, count and resolved toggle live in the page header (DocPage).
+    <div className="flex flex-col">
       <div className={cx(aligned && 'relative')} style={aligned ? { minHeight: bottom } : undefined}>
         {orphaned.length > 0 && (
           <div ref={orphansRef} className={cx('flex flex-col gap-2', aligned && 'absolute top-0 right-0 left-0', !aligned && 'mb-2')}>
