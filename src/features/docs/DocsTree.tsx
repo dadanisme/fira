@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
 import { Link, useMatch, useNavigate } from 'react-router';
 import {
   closestCenter,
@@ -151,11 +151,16 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
   const [offsetX, setOffsetX] = useState(0);
 
   const children = useMemo(() => childrenMap(pages, templates), [pages, templates]);
-  const expanded = useMemo(() => {
-    const set = new Set(stored);
-    for (const a of ancestors(pages, activePageId)) set.add(a.id);
-    return set;
-  }, [stored, pages, activePageId]);
+  // Reveal the active page once per navigation (not on every render), so its ancestors can still be collapsed.
+  const revealed = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!activePageId || revealed.current === activePageId) return;
+    const chain = ancestors(pages, activePageId);
+    if (chain.length === 0 && !pages.some((p) => p.id === activePageId)) return; // pages not loaded yet
+    revealed.current = activePageId;
+    for (const a of chain) if (!expandedState.has(a.id)) setExpanded(a.id, true);
+  }, [pages, activePageId]);
+  const expanded = stored;
   const items = useMemo(() => flatten(children, expanded, dragId), [children, expanded, dragId]);
   const projection: Projection | null = dragId && overId ? project(items, dragId, overId, offsetX, INDENT * remPx()) : null;
 
@@ -273,9 +278,22 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
         >
           <ChevronRight size="0.8125rem" className={cx('transition-transform', expanded && 'rotate-90')} />
         </button>
-        <span className="flex w-4 shrink-0 justify-center">
-          <PageIcon page={page} />
-        </span>
+        {item.hasChildren ? (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            onClick={() => setExpanded(page.id, !expanded)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="flex w-4 shrink-0 justify-center"
+          >
+            <PageIcon page={page} />
+          </button>
+        ) : (
+          <Link to={`/d/${page.id}`} draggable={false} tabIndex={-1} className="flex w-4 shrink-0 justify-center">
+            <PageIcon page={page} />
+          </Link>
+        )}
         {renaming ? (
           <RenameInput page={page} onDone={() => setRenaming(false)} />
         ) : (
