@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   AlertTriangle,
@@ -162,6 +162,26 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   };
   const showAside = wide && !asideHidden && (visibleThreads.length > 0 || pending !== null || threads.length > 0);
 
+  // Showing comments (column or resolved ones) with none in view scrolls to the nearest one below, else the closest above.
+  const scroller = useRef<HTMLDivElement>(null);
+  const [revealTick, setRevealTick] = useState(0);
+  useEffect(() => {
+    if (!revealTick) return;
+    // Cards animate to their final `top`; measure once they've settled.
+    const timer = setTimeout(() => {
+      const sc = scroller.current;
+      if (!sc) return;
+      const view = sc.getBoundingClientRect();
+      const rects = [...sc.querySelectorAll('aside [data-thread-card]')].map((c) => c.getBoundingClientRect());
+      if (rects.length === 0 || rects.some((r) => r.bottom > view.top && r.top < view.bottom)) return;
+      const below = rects.filter((r) => r.top >= view.bottom).sort((a, b) => a.top - b.top)[0];
+      const target = below ?? rects.sort((a, b) => b.top - a.top)[0];
+      sc.scrollBy({ top: target.top - view.top - 3 * remPx(), behavior: 'smooth' });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [revealTick]);
+  const reveal = () => setRevealTick((n) => n + 1);
+
   // ------------------------------------------------ misc
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: card } = useLinkedCard(page.cardId);
@@ -212,7 +232,11 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         <IconButton
           label={wide ? (asideHidden ? 'Show comments' : 'Hide comments') : 'Comments'}
           active={wide ? !asideHidden && showAside : commentsOpen}
-          onClick={() => (wide ? setAsideHidden(!asideHidden) : setCommentsOpen(!commentsOpen))}
+          onClick={() => {
+            if (!wide) return setCommentsOpen(!commentsOpen);
+            setAsideHidden(!asideHidden);
+            if (asideHidden) reveal();
+          }}
         >
           <span className="relative">
             <MessageSquare size="0.9375rem" />
@@ -228,7 +252,10 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             label={showResolved ? 'Hide resolved comments' : `Show resolved comments (${resolvedThreads})`}
             active={showResolved}
             aria-pressed={showResolved}
-            onClick={() => setShowResolved(!showResolved)}
+            onClick={() => {
+              setShowResolved(!showResolved);
+              if (!showResolved) reveal();
+            }}
           >
             <MessageSquareCheck size="0.9375rem" />
           </IconButton>
@@ -310,7 +337,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
         <div className="relative flex justify-center gap-10 px-6 sm:px-12">
           <article className="w-full max-w-180 min-w-0 pt-12 pb-4">
             <div className="group/head">
