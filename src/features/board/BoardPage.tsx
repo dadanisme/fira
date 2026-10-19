@@ -15,11 +15,11 @@ import { BoardDataProvider, useBoardData } from './context';
 import { FilterBar } from './FilterBar';
 import { parseFilters } from './filters';
 import { useDelayedFlag, useStableList } from './hooks';
-import { CardPanel } from './panel/CardPanel';
+import { CardDialog } from './panel/CardDialog';
 import { toastError, Toasts } from './toast';
 import { LabelsProvider } from './ui';
 
-/** `/p/:projectKey/:cardKey?`: the board, plus the side peek when a card key is present. */
+/** `/p/:projectKey/:cardKey?`: the board, plus the card dialog when a card key is present. */
 export default function BoardPage() {
   const { projectKey, cardKey } = useParams();
   const { data: project, loading } = useProject(projectKey);
@@ -32,7 +32,7 @@ export default function BoardPage() {
   const filters = useMemo(() => parseFilters(new URLSearchParams(search)), [search]);
   const slow = useDelayedFlag(loading || cardsLive.loading);
 
-  // Stable across navigations so memoized tiles don't re-render when the peek opens.
+  // Stable across navigations so memoized tiles don't re-render when the dialog opens.
   const searchRef = useRef(search);
   searchRef.current = search;
   const key = project?.key;
@@ -41,6 +41,12 @@ export default function BoardPage() {
     [navigate, key],
   );
   const onClose = useCallback(() => navigate({ pathname: `/p/${key}`, search: searchRef.current }), [navigate, key]);
+
+  // The dialog stays mounted for its exit animation after the URL drops the card key.
+  const openKey = key && cardKey ? `${key}/${cardKey.toUpperCase()}` : undefined;
+  const [shownKey, setShownKey] = useState(openKey);
+  if (openKey && openKey !== shownKey) setShownKey(openKey);
+  const onExited = useCallback(() => setShownKey(undefined), []);
 
   if (loading) return slow ? <BoardSkeleton /> : null;
   if (!project) {
@@ -80,7 +86,16 @@ export default function BoardPage() {
           ) : (
             <Board filters={filters} selectedKey={cardKey?.toUpperCase()} onOpen={onOpen} />
           )}
-          {cardKey && <CardPanel cardKey={cardKey.toUpperCase()} loading={cardsLive.loading} onClose={onClose} onOpen={onOpen} />}
+          {shownKey?.startsWith(`${project.key}/`) && (
+            <CardDialog
+              cardKey={shownKey.slice(project.key.length + 1)}
+              open={shownKey === openKey}
+              loading={cardsLive.loading}
+              onClose={onClose}
+              onExited={onExited}
+              onOpen={onOpen}
+            />
+          )}
         </div>
         <Toasts />
       </BoardDataProvider>

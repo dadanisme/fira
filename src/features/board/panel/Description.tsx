@@ -3,7 +3,7 @@ import type { Card } from '@shared/types';
 import { MarkdownEditor } from '../../../components/MarkdownEditor';
 import { Button } from '../../../components/Button';
 import { patchCard, useBoardData } from '../context';
-import { useLatest } from '../hooks';
+import { blurActive, useLatest } from '../hooks';
 
 const SAVE_DELAY_MS = 800;
 
@@ -104,6 +104,7 @@ export function Description({ card }: { card: Card }) {
         onChange={onChange}
         placeholder="Add a description…"
         variant="compact"
+        onCancel={blurActive}
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false);

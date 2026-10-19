@@ -64,3 +64,8 @@ export function useLatest<T>(value: T) {
   });
   return ref;
 }
+
+/** Leaves the focused field (e.g. Escape in an editor; the card dialog keeps focus inside). */
+export function blurActive(): void {
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+}

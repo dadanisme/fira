@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-/** A titled block of the peek panel. */
+/** A titled block of the card dialog. */
 export function Section({ title, meta, action, children }: { title: string; meta?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <section aria-label={title} className="flex flex-col">

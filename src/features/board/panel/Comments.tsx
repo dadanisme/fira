@@ -9,6 +9,7 @@ import { IconButton } from '../../../components/IconButton';
 import { MarkdownEditor, MarkdownView } from '../../../components/MarkdownEditor';
 import { run } from '../context';
 import { absoluteTime, relativeTime } from '../format';
+import { blurActive } from '../hooks';
 import { Section } from './Section';
 
 export function Comments({ card }: { card: Card }) {
@@ -47,6 +48,7 @@ function Composer({ cardId }: { cardId: string }) {
         value=""
         onChange={setDraft}
         onSubmit={submit}
+        onCancel={blurActive}
         placeholder="Leave a comment…"
         variant="compact"
         className="min-h-10 px-2.5 py-2 text-[13px]"

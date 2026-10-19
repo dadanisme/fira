@@ -14,7 +14,7 @@ export const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { index: true, element: <Home /> },
-      // One route for board + side peek, so opening a card does not remount the board.
+      // One route for board + card dialog, so opening a card does not remount the board.
       { path: 'p/:projectKey/:cardKey?', element: <BoardPage /> },
       { path: 'd/:pageId', element: <DocPage /> },
       { path: 'trash', element: <TrashPage /> },

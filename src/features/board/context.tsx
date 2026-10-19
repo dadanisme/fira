@@ -6,7 +6,7 @@ import { doneColumn } from '@shared/status';
 import { updateCard } from '../../data/cards';
 import { toastError } from './toast';
 
-/** Everything the board and the peek panel derive from the project's card list. */
+/** Everything the board and the card dialog derive from the project's card list. */
 export interface BoardData {
   project: Project;
   cards: readonly Card[];

@@ -29,6 +29,7 @@
   --ring: rgb(91 91 214 / 0.45);
   --popover-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), 0 8px 24px -6px rgb(0 0 0 / 0.16);
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  --overlay: rgb(0 0 0 / 0.32); /* modal backdrop */
 
   --prio-urgent: #e5484d;
   --prio-high: #f76b15;
@@ -70,6 +71,7 @@
   --ring: rgb(123 123 240 / 0.5);
   --popover-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 8px 24px -6px rgb(0 0 0 / 0.6);
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --overlay: rgb(0 0 0 / 0.55);
 
   --label-gray-bg: #2e2e33;   --label-gray-fg: #b4b4bd;
   --label-red-bg: #3d1f21;    --label-red-fg: #f4a3a6;
@@ -106,6 +108,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
   --color-prio-urgent: var(--prio-urgent);
   --color-prio-high: var(--prio-high);
   --color-prio-medium: var(--prio-medium);
