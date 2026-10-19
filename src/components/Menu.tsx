@@ -38,11 +38,13 @@ export interface MenuItemProps {
   disabled?: boolean;
   /** Keep the enclosing Popover open after selecting (multi-select). */
   keepOpen?: boolean;
+  /** Tooltip; also shown while disabled (e.g. why the action is unavailable). */
+  title?: string;
 }
 
-export function MenuItem({ onSelect, children, icon, selected, danger, disabled, keepOpen }: MenuItemProps) {
+export function MenuItem({ onSelect, children, icon, selected, danger, disabled, keepOpen, title }: MenuItemProps) {
   const close = usePopoverClose();
-  return (
+  const button = (
     <button
       type="button"
       role="menuitem"
@@ -54,13 +56,23 @@ export function MenuItem({ onSelect, children, icon, selected, danger, disabled,
       className={cx(
         'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none',
         'hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50',
+        title && 'disabled:pointer-events-none',
         danger ? 'text-danger' : 'text-fg',
       )}
+      title={title}
     >
       {icon && <span className="flex w-4 shrink-0 justify-center text-fg-muted">{icon}</span>}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {selected && <Check size={14} className="shrink-0 text-fg-muted" />}
     </button>
+  );
+  // Disabled buttons get no hover events; the wrapper carries the tooltip instead.
+  return title && disabled ? (
+    <span title={title} className="flex shrink-0 cursor-not-allowed">
+      {button}
+    </span>
+  ) : (
+    button
   );
 }
 

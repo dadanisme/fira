@@ -1,18 +1,28 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  closestCorners,
+  closestCenter,
   DndContext,
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  arrayMove,
+  horizontalListSortingStrategy,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Card, Column } from '@shared/types';
 import { byRank, compareRank, rankAtIndex } from '@shared/rank';
@@ -20,12 +30,43 @@ import { moveCard } from '../../data/cards';
 import { cx } from '../../lib/cx';
 import { AddCard } from './AddCard';
 import { CardTile } from './CardTile';
+import { AddColumn, ColumnHeader } from './ColumnHeader';
+import { columnCardCounts, useColumns, type ColumnsApi } from './columns';
 import { markDragEnd } from './dragClock';
 import { cardMatcher, type Filters } from './filters';
 import { useBoardData, type BoardData } from './context';
 import { toastError } from './toast';
 
 type Move = { status: string; rank: string };
+
+/** Sortable ids of columns are prefixed so they never collide with column droppables or cards. */
+const COLUMN_PREFIX = 'column:';
+const columnSortId = (id: string) => COLUMN_PREFIX + id;
+const fromColumnSortId = (id: string) => id.slice(COLUMN_PREFIX.length);
+type DragKind = 'card' | 'column' | 'container';
+const kindOf = (data: { current?: Record<string, unknown> | null }) => data.current?.kind as DragKind | undefined;
+
+/**
+ * Columns are found by the pointer first, then the closest card inside that column.
+ * Plain closestCorners over every droppable compares corner distances, so a tall
+ * column's far bottom corners lose to cards in a neighbouring column: drops landed in
+ * the wrong column (e.g. never in a middle or empty one).
+ */
+const collisionDetection: CollisionDetection = (args) => {
+  const all = args.droppableContainers;
+  if (kindOf(args.active.data) === 'column') {
+    return closestCenter({ ...args, droppableContainers: all.filter((c) => kindOf(c.data) === 'column') });
+  }
+  const containers = all.filter((c) => kindOf(c.data) === 'container');
+  const scoped = { ...args, droppableContainers: containers };
+  let hits = pointerWithin(scoped);
+  if (!hits.length) hits = rectIntersection(scoped);
+  if (!hits.length) hits = closestCenter(scoped);
+  const columnId = hits[0]?.id;
+  if (columnId === undefined) return [];
+  const cardsIn = all.filter((c) => kindOf(c.data) === 'card' && c.data.current?.sortable?.containerId === columnId);
+  return cardsIn.length ? closestCenter({ ...args, droppableContainers: cardsIn }) : [hits[0]];
+};
 
 export interface BoardProps {
   filters: Filters;
@@ -41,7 +82,9 @@ export interface BoardProps {
 export function Board({ filters, selectedKey, onOpen }: BoardProps) {
   const data = useBoardData();
   const { project, cards } = data;
-  const columns = project.columns;
+  const columnsApi = useColumns(project);
+  const { columns } = columnsApi;
+  const cardTotals = useMemo(() => columnCardCounts(cards), [cards]);
 
   // ------------------------------------------------ optimistic moves
   const [moves, setMoves] = useState<ReadonlyMap<string, Move>>(new Map());
@@ -97,18 +140,23 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
     }),
   );
   const [drag, setDrag] = useState<{ id: string; columns: Record<string, string[]> } | null>(null);
+  const [columnDrag, setColumnDrag] = useState<string | null>(null);
 
   const containerOf = (cols: Record<string, string[]>, id: string) =>
     id in cols ? id : Object.keys(cols).find((k) => cols[k].includes(id));
 
   const onDragStart = ({ active }: DragStartEvent) => {
+    if (kindOf(active.data) === 'column') {
+      setColumnDrag(String(active.id));
+      return;
+    }
     const snapshot: Record<string, string[]> = {};
     for (const [col, list] of groups) snapshot[col] = list.map((c) => c.id);
     setDrag({ id: String(active.id), columns: snapshot });
   };
 
   const onDragOver = ({ active, over }: DragOverEvent) => {
-    if (!over) return;
+    if (!over || kindOf(active.data) === 'column') return;
     setDrag((d) => {
       if (!d) return d;
       const activeId = String(active.id);
@@ -137,6 +185,11 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     markDragEnd();
+    if (kindOf(active.data) === 'column') {
+      setColumnDrag(null);
+      if (over) columnsApi.move(fromColumnSortId(String(active.id)), fromColumnSortId(String(over.id)));
+      return;
+    }
     const d = drag;
     setDrag(null);
     if (!d || !over) return;
@@ -188,35 +241,43 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
   const onDragCancel = () => {
     markDragEnd();
     setDrag(null);
+    setColumnDrag(null);
   };
 
   const activeCard = drag ? data.byId.get(drag.id) : undefined;
+  const columnSortIds = useMemo(() => columns.map((c) => columnSortId(c.id)), [columns]);
   const lookup = useCallback((id: string) => effective(data, moves, id), [data, moves]);
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
     >
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 pt-1 pb-4">
-        {columns.map((col) => (
-          <BoardColumn
-            key={col.id}
-            column={col}
-            cards={drag ? undefined : groups.get(col.id)}
-            dragIds={drag?.columns[col.id]}
-            lookup={lookup}
-            lastRank={lastRank.get(col.id) ?? null}
-            selectedKey={selectedKey}
-            onOpen={onOpen}
-          />
-        ))}
+        <SortableContext items={columnSortIds} strategy={horizontalListSortingStrategy}>
+          {columns.map((col) => (
+            <BoardColumn
+              key={col.id}
+              column={col}
+              columnsApi={columnsApi}
+              cardTotal={cardTotals.get(col.id) ?? 0}
+              cards={drag ? undefined : groups.get(col.id)}
+              dragIds={drag?.columns[col.id]}
+              lookup={lookup}
+              lastRank={lastRank.get(col.id) ?? null}
+              selectedKey={selectedKey}
+              onOpen={onOpen}
+            />
+          ))}
+        </SortableContext>
+        <AddColumn onAdd={columnsApi.add} />
       </div>
-      <DragOverlay dropAnimation={{ duration: 150, easing: 'ease-out' }}>
+      {/* Columns move in place; only cards use the overlay (its drop animation would hide a column). */}
+      <DragOverlay dropAnimation={columnDrag ? null : { duration: 150, easing: 'ease-out' }}>
         {activeCard && <Tile card={activeCard} overlay onOpen={onOpen} />}
       </DragOverlay>
     </DndContext>
@@ -233,6 +294,9 @@ function effective(data: BoardData, moves: ReadonlyMap<string, Move>, id: string
 
 interface ColumnProps {
   column: Column;
+  columnsApi: ColumnsApi;
+  /** All cards with this status, archived included. */
+  cardTotal: number;
   /** Cards when idle. */
   cards: Card[] | undefined;
   /** Ordered ids while a drag is in progress. */
@@ -243,18 +307,61 @@ interface ColumnProps {
   onOpen: (key: string) => void;
 }
 
-const BoardColumn = memo(function BoardColumn({ column, cards, dragIds, lookup, lastRank, selectedKey, onOpen }: ColumnProps) {
+const CONTAINER_DATA = { kind: 'container' } as const;
+const COLUMN_DATA = { kind: 'column' } as const;
+const CARD_DATA = { kind: 'card' } as const;
+
+const BoardColumn = memo(function BoardColumn({
+  column,
+  columnsApi,
+  cardTotal,
+  cards,
+  dragIds,
+  lookup,
+  lastRank,
+  selectedKey,
+  onOpen,
+}: ColumnProps) {
   const ids = useMemo(() => dragIds ?? cards?.map((c) => c.id) ?? [], [dragIds, cards]);
   const list = useMemo(() => cards ?? ids.map(lookup), [cards, ids, lookup]);
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  // The whole column (header included) is the drop target for cards.
+  const droppable = useDroppable({ id: column.id, data: CONTAINER_DATA });
+  const sortable = useSortable({ id: columnSortId(column.id), data: COLUMN_DATA });
+  const setDroppableRef = droppable.setNodeRef;
+  const setSortableRef = sortable.setNodeRef;
+  const sectionRef = useCallback(
+    (el: HTMLElement | null) => {
+      setDroppableRef(el);
+      setSortableRef(el);
+    },
+    [setDroppableRef, setSortableRef],
+  );
+  const id = column.id;
+  const onRename = useCallback((name: string) => columnsApi.rename(id, name), [columnsApi, id]);
+  const onRemove = useCallback(() => columnsApi.remove(id), [columnsApi, id]);
 
   return (
-    <section aria-label={column.name} className="flex w-72 shrink-0 flex-col rounded-lg bg-sunken/70">
-      <header className="flex h-9 shrink-0 items-center gap-2 px-3 text-[12px] font-medium text-fg-muted">
-        <span className="truncate">{column.name}</span>
-        <span className="text-fg-faint tabular-nums">{list.length}</span>
-      </header>
-      <div ref={setNodeRef} className={cx('flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2', isOver && 'bg-hover/50')}>
+    <section
+      ref={sectionRef}
+      aria-label={column.name}
+      style={{ transform: CSS.Translate.toString(sortable.transform), transition: sortable.transition }}
+      className={cx(
+        'flex w-72 shrink-0 flex-col rounded-lg bg-sunken/70',
+        sortable.isDragging && 'relative z-10 shadow-popover ring-1 ring-line',
+      )}
+    >
+      <ColumnHeader
+        column={column}
+        visibleCount={list.length}
+        cardTotal={cardTotal}
+        columnCount={columnsApi.columns.length}
+        onRename={onRename}
+        onRemove={onRemove}
+        handleRef={sortable.setActivatorNodeRef}
+        handleAttributes={sortable.attributes}
+        handleListeners={sortable.listeners}
+      />
+      <div className={cx('flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2', droppable.isOver && 'bg-hover/50')}>
         <SortableContext id={column.id} items={ids} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-1.5">
             {list.map((card) => (
@@ -269,7 +376,7 @@ const BoardColumn = memo(function BoardColumn({ column, cards, dragIds, lookup, 
 });
 
 const SortableTile = memo(function SortableTile({ card, selected, onOpen }: { card: Card; selected: boolean; onOpen: (key: string) => void }) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: card.id });
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: card.id, data: CARD_DATA });
   const t = CSS.Translate.toString(transform);
   const style = useMemo(() => ({ transform: t, transition }), [t, transition]);
   return (
