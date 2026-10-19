@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   AlertTriangle,
@@ -59,24 +59,31 @@ export default function DocPage() {
   return <PageView key={page.id} page={page} pages={pages} />;
 }
 
-/** Room for the article plus the comments aside: 73.75rem (1180 design px), in px for the current root font size. */
-const wideQuery = () => `(min-width: ${73.75 * remPx()}px)`;
-function useWide(): boolean {
-  return useSyncExternalStore(
-    (l) => {
-      const m = matchMedia(wideQuery());
-      m.addEventListener('change', l);
-      return () => m.removeEventListener('change', l);
-    },
-    () => matchMedia(wideQuery()).matches,
-  );
+/**
+ * Room for the article plus the comments aside: 58.75rem of page width (the old 73.75rem viewport
+ * minus the default 15rem sidebar). Measured on the page itself, so it follows sidebar resize/collapse.
+ */
+const WIDE_REM = 58.75;
+function useWide(ref: RefObject<HTMLElement | null>): boolean {
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWide(el.getBoundingClientRect().width >= WIDE_REM * remPx());
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return wide;
 }
 
 function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const navigate = useNavigate();
   const save = useAutosave(page);
   const editor = useRef<MarkdownEditorHandle>(null);
-  const wide = useWide();
+  const root = useRef<HTMLDivElement>(null);
+  const wide = useWide(root);
 
   // ------------------------------------------------ comments
   const { data: threads } = useThreads(page.id);
@@ -157,9 +164,9 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={root} className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <header className="flex h-11 shrink-0 items-center gap-2 px-3">
+      <header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-[calc(0.75rem+var(--shell-gutter,0rem))]">
         <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-base text-fg-muted">
           {page.isTemplate && <LayoutTemplate size="0.8125rem" className="mr-1 shrink-0 text-fg-faint" />}
           {crumbs.map((c) => (

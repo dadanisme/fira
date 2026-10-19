@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, Plus, Settings } from 'lucide-react';
+import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 import { useProjects } from '../data/projects';
 import { signOutUser, useUser } from '../lib/auth';
 import { Avatar } from '../components/Avatar';
@@ -8,19 +8,64 @@ import { IconButton } from '../components/IconButton';
 import { Logo } from '../components/Logo';
 import { Menu, MenuItem } from '../components/Menu';
 import { Popover } from '../components/Popover';
+import { cx } from '../lib/cx';
 import { NewProjectForm } from './NewProjectForm';
 import { SidebarLink, SidebarSection } from './SidebarSection';
+import { ResizeHandle } from './SidebarControls';
+import { useSidebar } from './sidebarState';
 import { ThemeToggle } from './ThemeToggle';
 
 // Owned by the docs feature; renders its own section(s) (pages tree, templates).
 const DocsTree = lazy(() => import('../features/docs/DocsTree'));
 
+/**
+ * The app sidebar. Wide screens: docked (resizable, collapsible) or, when collapsed, a floating
+ * overlay while hovered (peek). Narrow screens: an off-canvas drawer. State lives in the Layout.
+ */
 export function Sidebar() {
+  const s = useSidebar();
+  const visible = s.narrow ? s.drawerOpen : s.docked || s.peek;
+  const pinnable = s.peek; // peeking: the header button keeps it open instead of collapsing
+
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-line bg-sidebar sm:w-60">
-      <div className="flex h-11 items-center gap-2 px-4 text-md font-semibold tracking-tight">
+    <aside
+      id="app-sidebar"
+      aria-label="Sidebar"
+      tabIndex={-1}
+      inert={!visible}
+      onPointerEnter={() => s.hover(true)}
+      onPointerLeave={(e) => s.peek && s.hover(false, e.buttons)}
+      onClickCapture={(e) => {
+        // Drawer: following a link closes it (also when the link is the current page).
+        if (s.narrow && e.target instanceof Element && e.target.closest('a[href]')) s.collapse();
+      }}
+      className={cx(
+        'flex w-[var(--sidebar-w)] flex-col bg-sidebar outline-none',
+        'transition-[width,translate] duration-[120ms] ease-out motion-reduce:transition-none group-data-resizing/shell:transition-none',
+        s.narrow
+          ? 'fixed inset-y-0 left-0 z-40 max-w-[85vw] border-r border-line'
+          : s.floating
+            ? 'fixed top-11 bottom-2 left-0 z-40 overflow-hidden rounded-r-lg border border-l-0 border-line'
+            : 'absolute inset-y-0 left-0 z-10 border-r border-line',
+        // No translate at all while shown: a transform would re-anchor the docs tree's fixed DragOverlay.
+        !visible && '-translate-x-full',
+        visible && (s.narrow || s.floating) && 'shadow-popover',
+        s.docked && 'group-data-snap/shell:-translate-x-full',
+      )}
+    >
+      <div className="group/header flex h-11 shrink-0 items-center gap-2 pr-2 pl-4 text-md font-semibold tracking-tight">
         <Logo size={16} />
-        fira
+        <span className="flex-1">fira</span>
+        <IconButton
+          id="sidebar-toggle"
+          label={pinnable ? 'Keep sidebar open' : 'Close sidebar'}
+          aria-expanded={!pinnable}
+          aria-controls="app-sidebar"
+          onClick={pinnable ? s.expand : s.collapse}
+          className={cx(!s.narrow && !pinnable && 'opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100')}
+        >
+          {pinnable ? <PanelLeftOpen size="0.9375rem" /> : <PanelLeftClose size="0.9375rem" />}
+        </IconButton>
       </div>
       <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
         <ProjectsSection />
@@ -35,6 +80,7 @@ export function Sidebar() {
         <ThemeToggle />
         <UserMenu />
       </div>
+      {s.docked && <ResizeHandle />}
     </aside>
   );
 }

@@ -17,7 +17,7 @@ export default function SettingsPage() {
     <div className="flex min-h-0 flex-1">
       <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-line px-2 py-3">
         <div>
-          <div className="flex h-7 items-center px-2 text-xs font-medium text-fg-faint">Projects</div>
+          <div className="flex h-7 items-center pr-2 pl-[calc(0.5rem+var(--shell-gutter,0rem))] text-xs font-medium text-fg-faint">Projects</div>
           {projects.map((p) => (
             <Item key={p.id} to={`projects/${p.key}`} icon={<span className="font-mono text-2xs font-semibold">{p.key.slice(0, 2)}</span>}>
               {p.name}

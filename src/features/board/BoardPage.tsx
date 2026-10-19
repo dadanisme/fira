@@ -66,7 +66,7 @@ export default function BoardPage() {
     <LabelsProvider labels={labels}>
       <BoardDataProvider project={project} cards={cards} labels={labels}>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <header className="flex h-11 shrink-0 items-center gap-2 px-4">
+          <header className="flex h-11 shrink-0 items-center gap-2 pr-4 pl-[calc(1rem+var(--shell-gutter,0rem))]">
             <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-xs font-semibold text-fg-muted">{project.key}</span>
             <h1 className="truncate text-md font-semibold">{project.name}</h1>
             <span className="flex-1" />
