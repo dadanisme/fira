@@ -53,7 +53,7 @@ const curl = (label: string, source: string) => ({ lang: 'Shell', label, source 
 // One consistent world: project NI (video ideas pipeline), card NI-42 under epic NI-7,
 // its work page, and the agent token "agen".
 
-const agent = { type: 'token', id: 'Tk8Qm2Vx4LpZr7Ws1Hn3', name: 'agen' };
+const agent = { type: 'token', id: 'Tk8Qm2Vx4LpZr7Ws1Hn3', name: 'agen', via: { id: 'Gk2v9XcR1sYhQ7mN3pLw8ZtB4a62', name: 'Owner' } };
 const owner = { type: 'user', id: 'Gk2v9XcR1sYhQ7mN3pLw8ZtB4a62', name: 'Owner' };
 
 const columns = [
@@ -216,6 +216,9 @@ const tokenExample = {
   createdAt: '2026-09-02T08:20:00.000Z',
   lastUsedAt: '2026-10-19T08:30:11.000Z',
   revoked: false,
+  userEmail: 'owner@example.com',
+  userId: agent.via.id,
+  userName: agent.via.name,
 };
 const errorExample = (code: string, message: string, extra: Record<string, unknown> = {}) => ({ error: { code, message, ...extra } });
 
@@ -239,7 +242,7 @@ Base URL: \`${BASE}\`. Send the token as a bearer token with every request:
 \`\`\`bash
 export FIRA_TOKEN=fira_...
 curl ${BASE}/me -H "Authorization: Bearer $FIRA_TOKEN"
-# {"type":"token","id":"Tk8Qm2Vx4LpZr7Ws1Hn3","name":"agen"}
+# {"type":"token","id":"Tk8Qm2Vx4LpZr7Ws1Hn3","name":"agen","via":{"id":"Gk2v9XcR1sYhQ7mN3pLw8ZtB4a62","name":"Owner"}}
 \`\`\`
 
 Bodies are JSON (\`Content-Type: application/json\`), except attachment uploads (\`multipart/form-data\`). Timestamps are ISO 8601 strings in UTC, dates are \`YYYY-MM-DD\`, and card descriptions, comments and pages are Markdown.
@@ -263,8 +266,8 @@ Every error has the same shape: a machine-readable \`code\` and a \`message\` wr
 | Status | \`code\` | When |
 | --- | --- | --- |
 | 400 | \`bad_request\` | Malformed request: invalid JSON, wrong JSON types, **unknown body fields** (a typo such as \`label\` for \`labels\` is rejected, not ignored), missing required fields, bad \`limit\`/\`cursor\`/\`sort\` |
-| 401 | \`unauthorized\` | Missing \`Authorization\` header, malformed or revoked token |
-| 403 | \`forbidden\` | Token management by anyone but the owner |
+| 401 | \`unauthorized\` | Missing \`Authorization\` header, malformed or revoked token, or its creator is no longer a member |
+| 403 | \`forbidden\` | Token management by a Google account that isn't a member |
 | 404 | \`not_found\` | Unknown card key, project, page, thread or attachment; unknown route |
 | 405 | \`method_not_allowed\` | The path exists, but not with this method (see the \`Allow\` header) |
 | 409 | \`version_conflict\` | A versioned write based on a stale version (see below) |
@@ -353,13 +356,13 @@ Upload one file per request as \`multipart/form-data\` in a part named \`file\`,
 
 ## Actors and history
 
-Every write is attributed to an **actor** \`{ type, id, name }\`: \`token\` for API calls (named after the token), \`user\` for the owner in the app. It appears as \`createdBy\`/\`updatedBy\` on cards, \`author\` on comments and thread messages, \`uploadedBy\` on attachments, \`updatedBy\` on pages and \`actor\` on activity entries and page versions — so name tokens after the agents using them.
+Every write is attributed to an **actor** \`{ type, id, name, via? }\`: \`token\` for API calls (named after the token, with \`via\` naming the member who created it — the app shows "agen (via Alice)"), \`user\` for a member in the app. It appears as \`createdBy\`/\`updatedBy\` on cards, \`author\` on comments and thread messages, \`uploadedBy\` on attachments, \`updatedBy\` on pages and \`actor\` on activity entries and page versions — so name tokens after the agents using them.
 
 Every card change writes entries to the card's activity timeline (\`GET /cards/{key}/activity\`), exactly like the app does; status entries record column names. Every page title/content save through the API writes a version snapshot (\`GET /pages/{id}/versions\`).
 
 ## Token management
 
-The \`/tokens\` endpoints back **Settings → API tokens** and require the owner's Firebase ID token, not an API token: agents cannot create or revoke tokens.
+The \`/tokens\` endpoints back **Settings → API tokens** and require a member's Firebase ID token, not an API token: agents cannot create or revoke tokens. Each member creates and revokes their own tokens; the owner sees and can revoke everyone's. A token stops working (401) as soon as its creator is removed from the workspace.
 `.trim();
 
 // ---------------------------------------------------------------- the document
@@ -394,7 +397,7 @@ export const openapi = {
     },
     { name: 'Threads', description: 'Inline comment threads anchored to a quote in a page, with replies and resolve/reopen.' },
     { name: 'Projects & labels', description: 'Read-only project configuration (columns, custom fields) and the global label list.' },
-    { name: 'Tokens', description: "API token management, used by Settings → API tokens. Requires the owner's Firebase ID token." },
+    { name: 'Tokens', description: "API token management, used by Settings → API tokens. Requires a member's Firebase ID token." },
     { name: 'Meta', description: 'The calling actor and this OpenAPI document.' },
   ],
   'x-tagGroups': [
@@ -1001,7 +1004,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Tokens'],
         operationId: 'listTokens',
         summary: 'List API tokens',
-        description: 'All tokens, newest first, including revoked ones. Secrets are never returned (only their first 8 characters, `prefix`).',
+        description: "The caller's tokens (the owner: everyone's), newest first, including revoked ones. Secrets are never returned (only their first 8 characters, `prefix`).",
         security: [{ firebaseIdToken: [] }],
         parameters: [param('limit'), param('cursor')],
         responses: { 200: ok('A page of tokens', pageOf('ApiToken'), list([tokenExample])), ...errors(400, 401, 403) },
@@ -1010,7 +1013,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Tokens'],
         operationId: 'createToken',
         summary: 'Create an API token',
-        description: 'Creates a token and returns its secret — the only time it is ever shown. The name (1–40 characters) is the actor name on everything the token changes.',
+        description: 'Creates a token and returns its secret — the only time it is ever shown. The name (1–40 characters) is the actor name on everything the token changes; the caller is recorded as its creator (`via`).',
         security: [{ firebaseIdToken: [] }],
         requestBody: body(
           {
@@ -1042,7 +1045,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Tokens'],
         operationId: 'revokeToken',
         summary: 'Revoke an API token',
-        description: 'Marks the token revoked; requests with it fail with 401 from then on. Revoked tokens stay listed.',
+        description: "Marks the token revoked; requests with it fail with 401 from then on. Revoked tokens stay listed. Members can revoke only their own tokens (others' are 404); the owner can revoke any.",
         security: [{ firebaseIdToken: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, description: 'Token id', schema: { type: 'string' }, example: tokenExample.id }],
         responses: { 200: ok('The revoked token', ref('ApiToken'), { ...tokenExample, revoked: true }), ...errors(401, 403, 404) },
@@ -1084,7 +1087,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: "The owner's Firebase ID token (only for /tokens; the Settings UI sends it)",
+        description: "A member's Firebase ID token (only for /tokens; the Settings UI sends it)",
       },
     },
     parameters: {
@@ -1115,7 +1118,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         description: 'Missing, malformed or revoked credentials',
         content: json(ref('Error'), errorExample('unauthorized', 'Invalid or revoked API token')),
       },
-      Forbidden: { description: 'Signed in, but not the owner', content: json(ref('Error'), errorExample('forbidden', 'Owner only')) },
+      Forbidden: { description: 'Signed in, but not a member', content: json(ref('Error'), errorExample('forbidden', 'Members only')) },
       NotFound: {
         description: 'Unknown card, project, page, thread, attachment or token',
         content: json(ref('Error'), errorExample('not_found', 'Card NI-99 not found')),
@@ -1174,12 +1177,18 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
       },
       Actor: {
         type: 'object',
-        description: 'Who made a change: an API token or the owner in the app.',
+        description: 'Who made a change: an API token or a member in the app.',
         required: ['type', 'id', 'name'],
         properties: {
-          type: { type: 'string', enum: ['user', 'token'], description: '`token`: an API token; `user`: the owner in the app' },
+          type: { type: 'string', enum: ['user', 'token'], description: '`token`: an API token; `user`: a member in the app' },
           id: { type: 'string', description: 'Token id or Firebase uid' },
           name: { type: 'string', description: 'Token name or display name' },
+          via: {
+            type: 'object',
+            description: 'Tokens only: the member who created the token (absent on tokens created before members existed)',
+            required: ['id', 'name'],
+            properties: { id: { type: 'string', description: 'Firebase uid' }, name: { type: 'string', description: 'Display name' } },
+          },
         },
         example: agent,
       },
@@ -1194,6 +1203,9 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
           createdAt: timestampSchema(),
           lastUsedAt: { ...timestampSchema(), description: 'Updated at most every 5 minutes' },
           revoked: { type: 'boolean' },
+          userEmail: { type: 'string', format: 'email', description: 'Creator (lowercased); absent on legacy tokens, which belong to the owner' },
+          userId: { type: 'string', description: "Creator's Firebase uid" },
+          userName: { type: 'string', description: "Creator's display name (the actor's `via.name`)" },
         },
         example: tokenExample,
       },

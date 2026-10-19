@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { Actor } from '../../shared/types.js';
-import { ownerActor, tokenActor } from './auth.js';
+import { memberAuth, tokenActor, type Member } from './auth.js';
 import { HttpError, notFound, send, sendError } from './http.js';
 
 /**
@@ -9,8 +9,8 @@ import { HttpError, notFound, send, sendError } from './http.js';
  * function (Hobby plan limit) and avoids relying on catch-all filenames.
  */
 
-/** `token`: API token (`fira_...`). `owner`: owner Firebase ID token. `public`: none. */
-export type AuthMode = 'token' | 'owner' | 'public';
+/** `token`: API token (`fira_...`). `member`: Firebase ID token of the owner or an invited member. `public`: none. */
+export type AuthMode = 'token' | 'member' | 'public';
 
 export interface RequestContext<A extends AuthMode = AuthMode> {
   req: VercelRequest;
@@ -19,6 +19,8 @@ export interface RequestContext<A extends AuthMode = AuthMode> {
   /** Query string (repeatable params supported via `getAll`). */
   query: URLSearchParams;
   actor: A extends 'public' ? null : Actor;
+  /** The signed-in member, for `member` routes. */
+  member: A extends 'member' ? Member : null;
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -64,8 +66,9 @@ export function createRouter(routes: readonly Route[]) {
         throw new HttpError(405, 'method_not_allowed', `${req.method} not allowed`);
       }
 
-      const actor = hit.route.auth === 'token' ? await tokenActor(req) : hit.route.auth === 'owner' ? await ownerActor(req) : null;
-      send(res, await hit.route.handler({ req, params: hit.params, query: url.searchParams, actor }));
+      const member = hit.route.auth === 'member' ? await memberAuth(req) : null;
+      const actor = hit.route.auth === 'token' ? await tokenActor(req) : (member?.actor ?? null);
+      send(res, await hit.route.handler({ req, params: hit.params, query: url.searchParams, actor, member }));
     } catch (err) {
       sendError(res, err);
     }

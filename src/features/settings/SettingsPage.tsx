@@ -1,16 +1,17 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router';
-import { KeyRound, Plus, Tag } from 'lucide-react';
+import { KeyRound, Plus, Tag, Users } from 'lucide-react';
 import { useProjects } from '../../data/projects';
 import { NewProjectForm } from '../../app/NewProjectForm';
 import { cx } from '../../lib/cx';
 import { Toasts } from '../board/toast';
 import { LabelsSettings } from './LabelsSettings';
+import { MembersSettings } from './MembersSettings';
 import { ProjectSettings } from './ProjectSettings';
 import { TokensSettings } from './TokensSettings';
 import { PageTitle } from './ui';
 
-/** `/settings/*`: projects (name, work pages, columns, fields), labels, API tokens. */
+/** `/settings/*`: projects (name, work pages, columns, fields), labels, members, API tokens. */
 export default function SettingsPage() {
   const { data: projects, loading } = useProjects();
   return (
@@ -32,6 +33,9 @@ export default function SettingsPage() {
           <Item to="labels" icon={<Tag size="0.875rem" />}>
             Labels
           </Item>
+          <Item to="members" icon={<Users size="0.875rem" />}>
+            Members
+          </Item>
           <Item to="tokens" icon={<KeyRound size="0.875rem" />}>
             API tokens
           </Item>
@@ -47,6 +51,7 @@ export default function SettingsPage() {
             <Route path="projects/new" element={<NewProject />} />
             <Route path="projects/:projectKey" element={<ProjectRoute />} />
             <Route path="labels" element={<LabelsSettings />} />
+            <Route path="members" element={<MembersSettings />} />
             <Route path="tokens" element={<TokensSettings />} />
             <Route path="*" element={<Navigate to="/settings" replace />} />
           </Routes>

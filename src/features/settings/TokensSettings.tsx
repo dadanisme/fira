@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Check, Copy, KeyRound, Plus } from 'lucide-react';
-import type { ApiToken, LabelColor } from '@shared/types';
+import type { ApiToken, LabelColor, Member } from '@shared/types';
 import { colorFor } from '@shared/labels';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
+import { useMembers } from '../../data/members';
+import { useIsOwner, useUser } from '../../lib/auth';
 import { cx } from '../../lib/cx';
 import { absoluteTime, errorMessage, relativeTime } from '../board/format';
 import { useDelayedFlag } from '../board/hooks';
@@ -13,8 +15,14 @@ import { toastError } from '../board/toast';
 import { createToken, listTokens, revokeToken } from './api';
 import { PageTitle, RowList, SettingsSection } from './ui';
 
-/** API tokens for automation agents. Managed through the REST API (the server hashes secrets). */
+/**
+ * API tokens for automation agents. Managed through the REST API (the server hashes secrets).
+ * Members see their own tokens; the owner sees everyone's, with who created each.
+ */
 export function TokensSettings() {
+  const owner = useIsOwner();
+  const user = useUser();
+  const { data: members } = useMembers();
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ token: ApiToken; secret: string } | null>(null);
@@ -54,7 +62,8 @@ export function TokensSettings() {
         description={
           <>
             Personal tokens for agents calling <code className="text-sm">/api/v1</code> with <code className="text-sm">Authorization: Bearer fira_…</code>.
-            Their changes show up as the token's name.{' '}
+            Their changes show up under the token's name and yours, e.g. “agen (via {user.displayName ?? 'you'})”.
+            {owner && ' As the owner, you see and can revoke every member’s tokens.'}{' '}
             {/* A static page outside the SPA (public/docs/api), so a plain link, not a router Link. */}
             <a href="/docs/api" target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">
               API documentation →
@@ -89,7 +98,7 @@ export function TokensSettings() {
         ) : (
           <RowList>
             {active.map((t) => (
-              <TokenRow key={t.id} token={t} onRevoke={() => void revoke(t)} />
+              <TokenRow key={t.id} token={t} creator={owner ? creatorOf(t, members) : undefined} onRevoke={() => void revoke(t)} />
             ))}
           </RowList>
         )}
@@ -102,7 +111,7 @@ export function TokensSettings() {
               <div className="mt-2">
                 <RowList>
                   {revoked.map((t) => (
-                    <TokenRow key={t.id} token={t} />
+                    <TokenRow key={t.id} token={t} creator={owner ? creatorOf(t, members) : undefined} />
                   ))}
                 </RowList>
               </div>
@@ -191,7 +200,14 @@ function SecretNotice({ created, onDone }: { created: { token: ApiToken; secret:
   );
 }
 
-function TokenRow({ token: t, onRevoke }: { token: ApiToken; onRevoke?: () => void }) {
+/** Who created a token, for the owner's view. Legacy tokens without a creator are the owner's. */
+function creatorOf(t: ApiToken, members: readonly Member[]): { name: string; removed: boolean } {
+  if (!t.userEmail) return { name: 'Owner', removed: false };
+  const member = members.find((m) => m.id === t.userEmail);
+  return { name: member?.name ?? t.userName ?? t.userEmail, removed: members.length > 0 && !member };
+}
+
+function TokenRow({ token: t, creator, onRevoke }: { token: ApiToken; creator?: { name: string; removed: boolean }; onRevoke?: () => void }) {
   return (
     <li className={cx('flex h-11 items-center gap-2.5 px-3', t.revoked && 'opacity-60')}>
       <Avatar actor={{ type: 'token', id: t.id, name: t.name }} size={20} />
@@ -207,6 +223,8 @@ function TokenRow({ token: t, onRevoke }: { token: ApiToken; onRevoke?: () => vo
           <span title={absoluteTime(t.createdAt)}>Created {relativeTime(t.createdAt)}</span>
           {' · '}
           <span title={absoluteTime(t.lastUsedAt)}>{t.lastUsedAt ? `Last used ${relativeTime(t.lastUsedAt)}` : 'Never used'}</span>
+          {creator && ` · By ${creator.name}`}
+          {creator?.removed && !t.revoked && <span className="text-danger"> · Creator removed, inactive</span>}
           {t.revoked && ' · Revoked'}
         </div>
       </div>

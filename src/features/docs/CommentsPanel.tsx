@@ -14,8 +14,8 @@ export type PendingAnchor = Omit<CommentAnchor, 'id'>;
 export interface CommentsPanelProps {
   pageId: string;
   threads: Thread[];
+  /** Whether resolved threads are listed (toggled from the page header). */
   showResolved: boolean;
-  onShowResolved(show: boolean): void;
   /** Thread id → top offset (px) in the panel's coordinate space; absent = orphaned. */
   positions: Record<string, number>;
   /** Cards follow their highlight (wide screens); otherwise a plain list. */
@@ -85,11 +85,6 @@ export function CommentsPanel(props: CommentsPanelProps) {
     <div className={cx('flex flex-col gap-2', aligned && 'min-h-full')}>
       <div className="sticky top-0 z-10 -mx-1 flex h-6 items-center justify-between bg-bg px-1 text-xs font-medium text-fg-faint">
         <span>Comments{visible.length > 0 && ` · ${visible.length}`}</span>
-        {resolvedCount > 0 && (
-          <button type="button" onClick={() => props.onShowResolved(!showResolved)} className="rounded px-1 hover:bg-hover hover:text-fg">
-            {showResolved ? 'Hide resolved' : `Show resolved (${resolvedCount})`}
-          </button>
-        )}
       </div>
       <div className={cx(aligned && 'relative')} style={aligned ? { minHeight: bottom } : undefined}>
         {orphaned.length > 0 && (

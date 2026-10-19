@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { CircleDot, ExternalLink } from 'lucide-react';
 import { PRIORITIES, type Card, type FieldDef, type FieldValue } from '@shared/types';
 import { rankAfterLast } from '@shared/rank';
+import { actorName } from '@shared/actors';
 import { Avatar } from '../../../components/Avatar';
 import { Badge } from '../../../components/Badge';
 import { Menu, MenuItem, MenuSeparator } from '../../../components/Menu';
@@ -129,7 +130,7 @@ export function Properties({ card }: { card: Card }) {
         <span className="flex h-7 items-center gap-1.5 px-2 text-fg-muted" title={absoluteTime(card.createdAt)}>
           <Avatar actor={card.createdBy} size={16} />
           <span className="truncate">
-            {card.createdBy.name} · {relativeTime(card.createdAt)}
+            {actorName(card.createdBy)} · {relativeTime(card.createdAt)}
           </span>
         </span>
       </Row>

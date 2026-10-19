@@ -1,12 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { FirestoreError } from 'firebase/firestore';
 import type { Page } from '@shared/types';
-import { savePage } from '../../data/pages';
+import { savePageVersioned, type PageState } from '../../data/pages';
 
 const DEBOUNCE_MS = 700;
+/** "Editing" (for presence) lasts this long after the last keystroke, or while edits are unsaved. */
+const EDITING_MS = 20_000;
+/** Retry delay after a failed or offline save (also retried on the `online` event). */
+const RETRY_MS = 10_000;
+/** A local draft written by another tab this recently is that tab's in-flight save: don't adopt it. */
+const FOREIGN_DRAFT_MS = 10_000;
 
-export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'offline' | 'error';
 
 type Field = 'title' | 'content';
+const FIELDS = ['title', 'content'] as const;
+
+/** Server state the local edits build on. */
+interface Base {
+  version: number;
+  title: string;
+  content: string;
+}
 
 export interface Autosave {
   title: string;
@@ -16,138 +31,314 @@ export interface Autosave {
   /** Replaces the content as if typed (e.g. applying a template); the editor picks it up as an external change. */
   replaceContent(content: string): void;
   status: SaveStatus;
-  /** Set when the live page moved on (someone else saved) while overlapping local edits are unsaved. */
-  conflict: Page | null;
-  reloadTheirs(): void;
+  /**
+   * Someone else's save that clashes with unsaved local edits (same field changed on
+   * both sides). Autosave is paused until `loadTheirs` or `keepMine`.
+   */
+  conflict: PageState | null;
+  /** Typed in the last 20 s or holding unsaved edits (for presence). */
+  editing: boolean;
+  /** Drops local edits and loads the latest saved version. */
+  loadTheirs(): void;
+  /** Saves local edits on top of the latest version (both end up in version history). */
   keepMine(): void;
   /** Drops unsaved local edits (e.g. before restoring a version). */
   discard(): void;
 }
 
+// ------------------------------------------------------------- local drafts
+// Unsaved edits are mirrored to localStorage (on each debounced save attempt, not per
+// keystroke) until the server confirms them, so they survive offline periods, reloads
+// and closed tabs. A draft remembers its base, so conflicts are detected on return.
+
+interface StoredDraft {
+  base: Base;
+  title: string;
+  content: string;
+  at: number;
+  tab: string;
+}
+
+const draftKey = (pageId: string) => `fira:page-draft:${pageId}`;
+
+const TAB_ID = (() => {
+  const fresh = Math.random().toString(36).slice(2);
+  try {
+    const id = sessionStorage.getItem('fira:tab') ?? fresh;
+    sessionStorage.setItem('fira:tab', id);
+    return id;
+  } catch {
+    return fresh;
+  }
+})();
+
+function readDraft(pageId: string): StoredDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(pageId));
+    return raw ? (JSON.parse(raw) as StoredDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(pageId: string, base: Base, draft: { title: string; content: string }) {
+  try {
+    const stored: StoredDraft = { base, ...draft, at: Date.now(), tab: TAB_ID };
+    localStorage.setItem(draftKey(pageId), JSON.stringify(stored));
+  } catch {
+    // Storage full or blocked: the edit still lives in memory.
+  }
+}
+
+function clearDraft(pageId: string) {
+  try {
+    localStorage.removeItem(draftKey(pageId));
+  } catch {
+    // ignore
+  }
+}
+
+const stateOf = (p: Page): PageState => ({ version: p.version, title: p.title, content: p.content, updatedBy: p.updatedBy });
+const baseOf = (p: Base): Base => ({ version: p.version, title: p.title, content: p.content });
+const newest = (a: PageState | null, b: PageState): PageState => (a && a.version >= b.version ? a : b);
+
+function initialState(live: Page): { base: Base; title: string; content: string; restored: boolean } {
+  const fresh = { base: baseOf(live), title: live.title, content: live.content, restored: false };
+  const stored = readDraft(live.id);
+  if (!stored) return fresh;
+  if (stored.title === live.title && stored.content === live.content) {
+    clearDraft(live.id);
+    return fresh;
+  }
+  if (stored.tab !== TAB_ID && Date.now() - stored.at < FOREIGN_DRAFT_MS) return fresh;
+  return { base: stored.base, title: stored.title, content: stored.content, restored: true };
+}
+
 /**
- * Debounced optimistic autosave of a page's title and content with version-based
- * conflict detection. `base` is the page state the local edits build on; each
- * save writes `base.version + 1` and advances the base, so the echo of our own
- * write is recognized. Any other change to the live page either rebases silently
- * (no overlapping unsaved edits; remote values are applied) or raises `conflict`.
+ * Debounced autosave of a page's title and content, safe with several editors.
+ *
+ * Every save is conditional on the version the edits are based on (`savePageVersioned`,
+ * a transaction), so nobody's save is silently overwritten. Remote changes (another
+ * person, another tab, an API token) are applied silently when they don't touch a field
+ * with unsaved local edits (field-level: a remote title change never blocks a local
+ * content edit and vice versa). When they do, or a save is rejected and the same field
+ * changed on both sides, autosave pauses and `conflict` is set.
+ *
+ * Saves need the server (transactions don't run offline): offline, edits stay in the
+ * editor and in localStorage and are saved, still conditionally, once back online.
  */
 export function useAutosave(live: Page): Autosave {
-  const base = useRef<Page>(live);
-  const dirty = useRef<Record<Field, boolean>>({ title: false, content: false });
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [title, setTitleState] = useState(live.title);
-  const [content, setContentState] = useState(live.content);
-  const draft = useRef({ title: live.title, content: live.content });
+  const [init] = useState(() => initialState(live));
+  const [title, setTitleState] = useState(init.title);
+  const [content, setContentState] = useState(init.content);
   const [status, setStatus] = useState<SaveStatus>('idle');
-  const [conflict, setConflict] = useState<Page | null>(null);
-  const conflictRef = useRef<Page | null>(null);
+  const [conflict, setConflictState] = useState<PageState | null>(null);
+  const [editing, setEditing] = useState(init.restored);
+  // Updated in the effect below, before reconciling.
   const liveRef = useRef(live);
-  liveRef.current = live;
 
-  const flush = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = undefined;
-    if (conflictRef.current) return;
-    const changes: { title?: string; content?: string } = {};
-    if (dirty.current.title) changes.title = draft.current.title;
-    if (dirty.current.content) changes.content = draft.current.content;
-    dirty.current = { title: false, content: false };
-    const b = base.current;
-    if ((changes.title ?? b.title) === b.title && (changes.content ?? b.content) === b.content) return;
-    base.current = { ...b, ...changes, version: b.version + 1 };
-    setStatus('saving');
-    savePage(b, changes).then(
-      () => setStatus((s) => (s === 'saving' ? 'saved' : s)),
-      (err) => {
-        reportError(err);
-        setStatus('error');
-      },
-    );
-  }, []);
+  const [ctl] = useState(() => {
+    const pageId = live.id;
+    let base: Base = init.base;
+    const draft = { title: init.title, content: init.content };
+    let conflictState: PageState | null = null;
+    let inflight = false;
+    let generation = 0;
+    /** Unmounted: settle the last save but schedule nothing more (a local draft carries over). */
+    let stopped = false;
+    let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    let editingTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const schedule = useCallback(() => {
-    clearTimeout(timer.current);
-    if (!conflictRef.current) timer.current = setTimeout(flush, DEBOUNCE_MS);
-  }, [flush]);
+    const unsaved = (): Field[] => FIELDS.filter((f) => draft[f] !== base[f]);
 
-  const edit = useCallback(
-    (field: Field, value: string) => {
-      draft.current[field] = value;
-      dirty.current[field] = true;
+    const setDraft = (f: Field, value: string) => {
+      draft[f] = value;
+      (f === 'title' ? setTitleState : setContentState)(value);
+    };
+
+    const setConflict = (c: PageState | null) => {
+      conflictState = c;
+      setConflictState(c);
+    };
+
+    const schedule = (delay = DEBOUNCE_MS) => {
+      clearTimeout(saveTimer);
+      saveTimer = conflictState || stopped ? undefined : setTimeout(flush, delay);
+    };
+
+    const stillEditing = () => {
+      clearTimeout(editingTimer);
+      if (unsaved().length > 0) editingTimer = setTimeout(stillEditing, EDITING_MS);
+      else setEditing(false);
+    };
+
+    /** Moves the base to `remote`, taking its value for every field without local edits; false (and `conflict`) on a clash. */
+    const rebaseOnto = (remote: PageState): boolean => {
+      const clash = FIELDS.some((f) => draft[f] !== base[f] && remote[f] !== base[f] && remote[f] !== draft[f]);
+      if (clash) {
+        clearTimeout(saveTimer);
+        setConflict(remote);
+        return false;
+      }
+      const old = base;
+      base = baseOf(remote);
+      for (const f of FIELDS) if (draft[f] === old[f]) setDraft(f, remote[f]);
+      if (unsaved().length > 0) schedule();
+      else clearDraft(pageId);
+      return true;
+    };
+
+    /** Reacts to the live page (after each snapshot and after each save settles). */
+    const reconcile = () => {
+      if (inflight) return; // the save's outcome decides
+      const remote = liveRef.current;
+      if (remote.version < base.version) return; // older than what we saved
+      if (remote.version === base.version && remote.title === base.title && remote.content === base.content) return;
+      if (conflictState) {
+        if (remote.version > conflictState.version) setConflict(stateOf(remote));
+        return;
+      }
+      rebaseOnto(stateOf(remote));
+    };
+
+    const flush = (opts?: { snapshot?: boolean }) => {
+      clearTimeout(saveTimer);
+      saveTimer = undefined;
+      if (unsaved().length === 0) {
+        clearDraft(pageId);
+        return;
+      }
+      writeDraft(pageId, base, draft);
+      if (conflictState || inflight) return;
+      if (!navigator.onLine) {
+        setStatus('offline');
+        return;
+      }
+      const gen = generation;
+      const sent = { title: draft.title, content: draft.content };
+      inflight = true;
+      setStatus('saving');
+      const baseVersion = base.version;
+      // Through a promise, so a synchronous throw (e.g. signed out) lands in the error path.
+      Promise.resolve()
+        .then(() => savePageVersioned(pageId, baseVersion, sent, opts))
+        .then(
+        (res) => {
+          inflight = false;
+          if (gen !== generation) {
+            // Discarded meanwhile: whatever got saved is now the state everyone sees.
+            if (res.ok) {
+              base = { version: res.version, ...sent };
+              for (const f of FIELDS) setDraft(f, sent[f]);
+            }
+          } else if (res.ok) {
+            base = { version: res.version, ...sent };
+            setStatus((s) => (s === 'saving' ? 'saved' : s));
+            if (unsaved().length > 0) schedule();
+            else clearDraft(pageId);
+          } else {
+            setStatus('idle');
+            rebaseOnto(res.current);
+          }
+          reconcile();
+        },
+        (err: unknown) => {
+          inflight = false;
+          const offline = !navigator.onLine || (err instanceof FirestoreError && err.code === 'unavailable');
+          if (!offline) reportError(err);
+          setStatus(offline ? 'offline' : 'error');
+          schedule(RETRY_MS);
+          reconcile();
+        },
+      );
+    };
+
+    const edit = (f: Field, value: string) => {
+      setDraft(f, value);
+      setEditing(true);
+      clearTimeout(editingTimer);
+      editingTimer = setTimeout(stillEditing, EDITING_MS);
       schedule();
-    },
-    [schedule],
-  );
+    };
 
-  const setTitle = useCallback((v: string) => (setTitleState(v), edit('title', v)), [edit]);
-  const setContent = useCallback((v: string) => (setContentState(v), edit('content', v)), [edit]);
+    const resetTo = (state: Base) => {
+      clearTimeout(saveTimer);
+      base = baseOf(state);
+      for (const f of FIELDS) setDraft(f, state[f]);
+      setConflict(null);
+      clearDraft(pageId);
+      setStatus('idle');
+    };
 
-  const showConflict = (page: Page | null) => {
-    conflictRef.current = page;
-    setConflict(page);
-  };
-
-  const adopt = useCallback((page: Page, fields: Field[]) => {
-    base.current = page;
-    for (const f of fields) {
-      dirty.current[f] = false;
-      draft.current[f] = page[f];
-    }
-    if (fields.includes('title')) setTitleState(page.title);
-    if (fields.includes('content')) setContentState(page.content);
-  }, []);
+    return {
+      reconcile,
+      flush,
+      edit,
+      /** Mount: save a restored local draft (if still based on the live version; otherwise reconcile decides). */
+      start: () => {
+        stopped = false;
+        if (init.restored) {
+          setEditing(true);
+          editingTimer = setTimeout(stillEditing, EDITING_MS);
+          schedule(0);
+        }
+      },
+      stop: () => {
+        clearTimeout(editingTimer);
+        flush();
+        stopped = true;
+        clearTimeout(saveTimer);
+      },
+      loadTheirs: () => {
+        generation++;
+        resetTo(newest(conflictState, stateOf(liveRef.current)));
+      },
+      keepMine: () => {
+        const theirs = newest(conflictState, stateOf(liveRef.current));
+        base = baseOf(theirs);
+        setConflict(null);
+        flush({ snapshot: true });
+      },
+      discard: () => {
+        generation++;
+        resetTo(base);
+      },
+    };
+  });
 
   // React to the live page.
   useEffect(() => {
-    const b = base.current;
-    if (live.version === b.version && live.title === b.title && live.content === b.content) return;
-    const overlapping = (['title', 'content'] as const).filter((f) => dirty.current[f] && live[f] !== b[f]);
-    if (overlapping.length > 0) {
-      clearTimeout(timer.current);
-      showConflict(live);
-      return;
-    }
-    // Rebase: take remote values for fields without unsaved edits.
-    adopt(live, (['title', 'content'] as const).filter((f) => !dirty.current[f]));
-    if (conflictRef.current) showConflict(null);
-  }, [live, adopt]);
+    liveRef.current = live;
+    ctl.reconcile();
+  }, [live, ctl]);
 
-  // Flush on leave (unmount / tab hidden / unload).
+  // Save a restored draft; flush when leaving (unmount / tab hidden / pagehide) and when back online.
   useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === 'hidden') flush();
-    };
-    addEventListener('beforeunload', flush);
+    ctl.start();
+    const flush = () => ctl.flush();
+    const onHide = () => document.visibilityState === 'hidden' && flush();
+    addEventListener('pagehide', flush);
+    addEventListener('online', flush);
     document.addEventListener('visibilitychange', onHide);
     return () => {
-      removeEventListener('beforeunload', flush);
+      removeEventListener('pagehide', flush);
+      removeEventListener('online', flush);
       document.removeEventListener('visibilitychange', onHide);
-      flush();
+      ctl.stop();
     };
-  }, [flush]);
+  }, [ctl]);
 
   return {
     title,
     content,
-    setTitle,
-    setContent,
-    replaceContent: setContent,
+    setTitle: (v) => ctl.edit('title', v),
+    setContent: (v) => ctl.edit('content', v),
+    replaceContent: (v) => ctl.edit('content', v),
     status,
     conflict,
-    reloadTheirs: () => {
-      showConflict(null);
-      adopt(liveRef.current, ['title', 'content']);
-    },
-    keepMine: () => {
-      base.current = liveRef.current;
-      showConflict(null);
-      dirty.current = { title: draft.current.title !== liveRef.current.title, content: draft.current.content !== liveRef.current.content };
-      flush();
-    },
-    discard: () => {
-      clearTimeout(timer.current);
-      dirty.current = { title: false, content: false };
-      showConflict(null);
-    },
+    editing,
+    loadTheirs: ctl.loadTheirs,
+    keepMine: ctl.keepMine,
+    discard: ctl.discard,
   };
 }

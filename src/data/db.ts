@@ -8,7 +8,7 @@ import {
   type FieldValue,
   type FirestoreDataConverter,
 } from 'firebase/firestore';
-import type { Activity, Attachment, Card, Comment, Label, Page, PageVersion, Project, Thread } from '@shared/types';
+import type { Activity, Attachment, Card, Comment, Label, Member, Page, PageVersion, Project, Thread } from '@shared/types';
 import { db } from '../lib/firebase';
 
 /**
@@ -44,6 +44,7 @@ export const projectsCol = typed<Project>(collection(db, 'projects'));
 export const labelsCol = typed<Label>(collection(db, 'labels'));
 export const cardsCol = typed<Card>(collection(db, 'cards'));
 export const pagesCol = typed<Page>(collection(db, 'pages'));
+export const membersCol = typed<Member>(collection(db, 'members'));
 
 export const commentsCol = (cardId: string) => typed<Comment>(collection(db, 'cards', cardId, 'comments'));
 export const activityCol = (cardId: string) => typed<Activity>(collection(db, 'cards', cardId, 'activity'));

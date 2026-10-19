@@ -1,6 +1,7 @@
 import { memo, useMemo, useRef, useState } from 'react';
 import { Pencil, Trash } from 'lucide-react';
 import type { Card, Comment } from '@shared/types';
+import { actorName } from '@shared/actors';
 import { addComment, deleteComment, updateComment } from '../../../data/comments';
 import { useUser } from '../../../lib/auth';
 import { Avatar } from '../../../components/Avatar';
@@ -83,7 +84,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
       <Avatar actor={c.author} size={20} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <div className="flex h-5 items-center gap-1.5 text-sm">
-          <span className="font-medium text-fg">{c.author.name}</span>
+          <span className="font-medium text-fg">{actorName(c.author)}</span>
           <span className="text-fg-faint" title={absoluteTime(c.createdAt)}>
             {relativeTime(c.createdAt)}
             {c.updatedAt && ' (edited)'}

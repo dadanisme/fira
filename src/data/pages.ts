@@ -1,4 +1,5 @@
 import {
+  collection,
   deleteField,
   doc,
   getDocs,
@@ -19,7 +20,10 @@ import { db, storage } from '../lib/firebase';
 import { currentActor } from './actor';
 import { cardsCol, newDoc, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
 import { useLiveQuery, useLiveDoc, type Live } from './live';
+import { savePageIfCurrent, type PageSaveOptions, type PageSaveResult } from './pageSave';
 import { commitInChunks } from './writes';
+
+export type { PageSaveResult, PageState } from './pageSave';
 
 const allPages = query(pagesCol);
 
@@ -125,11 +129,10 @@ export function duplicatePage(page: Page, rank: string): string {
 }
 
 /**
- * Saves title and/or content as version `page.version + 1`, where `page` is the
- * version the edit is based on. The page write applies locally at once; conflict
- * detection is the caller's job (compare the live `usePage` version with the base
- * before saving). Also writes a version snapshot of the saved state when this save
- * starts a new session (see startsVersionSession).
+ * Unconditional save of title and/or content as version `page.version + 1` (applies
+ * locally at once, queues offline). It can overwrite a concurrent save made after
+ * `page` was read; prefer `savePageVersioned`, which the docs UI uses.
+ * @deprecated Use savePageVersioned.
  */
 export function savePage(page: Page, changes: { title?: string; content?: string }): Promise<void> {
   const actor = currentActor();
@@ -143,9 +146,28 @@ export function savePage(page: Page, changes: { title?: string; content?: string
   return Promise.all([write, snap]).then(() => undefined);
 }
 
-/** Restoring a version saves its title and content as a new version. */
+/**
+ * Saves title + content as `baseVersion + 1` only if the page is still at `baseVersion`
+ * (a transaction; see savePageIfCurrent). Resolves `{ ok: false, current }` when someone
+ * else saved first. Needs the server: offline it rejects with code `unavailable`.
+ */
+export function savePageVersioned(
+  pageId: string,
+  baseVersion: number,
+  next: { title: string; content: string },
+  opts?: PageSaveOptions,
+): Promise<PageSaveResult> {
+  return savePageIfCurrent(db, pageId, baseVersion, next, currentActor(), opts);
+}
+
+/**
+ * Restoring a version saves its title and content as a new version on top of whatever
+ * is current (snapshotting the replaced state first if it has no snapshot).
+ */
 export function restoreVersion(page: Page, version: PageVersion): Promise<void> {
-  return savePage(page, { title: version.title, content: version.content });
+  return savePageVersioned(page.id, page.version, { title: version.title, content: version.content }, { force: true, snapshot: true }).then(
+    () => undefined,
+  );
 }
 
 /** Non-versioned page properties (moving in the tree, icon, template flag). `null` clears the icon. */
@@ -184,11 +206,11 @@ export function restorePage(page: Page, pages: readonly Page[]): Promise<void> {
   );
 }
 
-/** Permanently deletes a page, its subtree, and their versions and threads. */
+/** Permanently deletes a page, its subtree, and their versions, threads and presence entries. */
 export async function deletePageForever(page: Page, pages: readonly Page[]): Promise<void> {
   const ids = subtreeIds(pages, page.id);
   const children = await Promise.all(
-    ids.flatMap((id) => [getDocs(versionsCol(id)), getDocs(threadsCol(id))]),
+    ids.flatMap((id) => [getDocs(versionsCol(id)), getDocs(threadsCol(id)), getDocs(collection(db, 'pages', id, 'presence'))]),
   );
   const refs = [...children.flatMap((snap) => snap.docs.map((d) => d.ref)), ...ids.map((id) => rawDoc('pages', id))];
   await commitInChunks(refs.map((ref) => (batch) => batch.delete(ref)));

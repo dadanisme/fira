@@ -5,20 +5,31 @@ service firebase.storage {
     // Owner email is hardcoded: keep in sync with firestore.rules and OWNER_EMAIL.
     function isOwner() {
       return request.auth != null
-        && request.auth.token.email == 'huntercitation@gmail.com'
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'huntercitation@gmail.com'
         && request.auth.token.email_verified == true;
+    }
+
+    // The owner, or an invited member (a Firestore `members/{lowercased email}` doc exists).
+    // Cross-service rules: Storage needs permission to read Firestore (granted on deploy).
+    function isMember() {
+      return isOwner()
+        || (request.auth != null
+          && request.auth.token.email is string
+          && request.auth.token.email_verified == true
+          && firestore.exists(/databases/(default)/documents/members/$(request.auth.token.email.lower())));
     }
 
     // Card attachments: attachments/{cardId}/{attachmentId}/{name}
     match /attachments/{path=**} {
-      allow read, write: if isOwner();
+      allow read, write: if isMember();
     }
 
     // Files stored with pages: pages/{pageId}/{attachmentId}/{name} (older editor
     // uploads: pages/{pageId}/{fileId}-{name}). Pages embed them by download-token URL
     // (?alt=media&token=...), which Storage serves without evaluating these rules.
     match /pages/{path=**} {
-      allow read, write: if isOwner();
+      allow read, write: if isMember();
     }
   }
 }

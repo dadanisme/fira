@@ -20,6 +20,8 @@ export interface Actor {
   /** Firebase uid for users, token document id for tokens. */
   id: string;
   name: string;
+  /** Tokens only: the member who created the token (uid + display name). Absent for legacy tokens. */
+  via?: { id: string; name: string };
 }
 
 // ---------------------------------------------------------------- projects
@@ -250,4 +252,33 @@ export interface ApiToken {
   createdAt: Timestamp;
   lastUsedAt?: Timestamp;
   revoked: boolean;
+  /** Creator (lowercased email, uid, display name). Absent on legacy tokens, which count as the owner's. */
+  userEmail?: string;
+  userId?: string;
+  userName?: string;
+}
+
+// ---------------------------------------------------------------- members
+
+export const MEMBER_ROLES = ['owner', 'member'] as const;
+export type MemberRole = (typeof MEMBER_ROLES)[number];
+
+/**
+ * `members/{id}`: who may use fira. `id` is the lowercased email. The owner (OWNER_EMAIL)
+ * is always allowed and upserts their own doc with role `owner`; everyone else must be
+ * invited by the owner. Profile fields are filled by the member on sign-in.
+ */
+export interface Member {
+  id: string;
+  /** Lowercased; equals `id`. */
+  email: string;
+  role: MemberRole;
+  addedAt: Timestamp;
+  /** Email of whoever added the member. */
+  addedBy: string;
+  uid?: string;
+  name?: string;
+  photoURL?: string;
+  /** Absent until the member first signs in ("pending"). */
+  lastSignInAt?: Timestamp;
 }

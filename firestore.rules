@@ -4,20 +4,56 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Owner email is hardcoded: rules cannot read env vars. Keep in sync with
     // OWNER_EMAIL / VITE_OWNER_EMAIL (and storage.rules).
-    function isOwner() {
+    function ownerEmail() {
+      return 'huntercitation@gmail.com';
+    }
+
+    function verified() {
       return request.auth != null
-        && request.auth.token.email == 'huntercitation@gmail.com'
+        && request.auth.token.email is string
         && request.auth.token.email_verified == true;
     }
 
-    // API tokens are created and revoked only by the server (Admin SDK bypasses rules).
-    match /tokens/{tokenId} {
-      allow read: if isOwner();
+    // Lowercased email of the caller; also their `members/{id}` document id.
+    function myEmail() {
+      return request.auth.token.email.lower();
     }
 
-    // Everything else (any depth). Rules OR together, so `tokens` is excluded here.
+    function isOwner() {
+      return verified() && myEmail() == ownerEmail();
+    }
+
+    // The owner, or a Google account the owner invited (a `members` doc exists).
+    function isMember() {
+      return isOwner()
+        || (verified() && exists(/databases/$(database)/documents/members/$(myEmail())));
+    }
+
+    // Invite list. Only the owner adds/removes members (never their own doc); members
+    // may only refresh their own profile fields on sign-in.
+    match /members/{memberId} {
+      allow read: if isMember();
+      allow create: if isOwner()
+        && request.resource.data.email == memberId
+        && request.resource.data.role == (memberId == ownerEmail() ? 'owner' : 'member');
+      allow update: if (isOwner()
+          && request.resource.data.email == memberId
+          && request.resource.data.role == (memberId == ownerEmail() ? 'owner' : 'member'))
+        || (isMember()
+          && memberId == myEmail()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'name', 'photoURL', 'lastSignInAt']));
+      allow delete: if isOwner() && memberId != ownerEmail();
+    }
+
+    // API tokens are created and revoked only by the server (Admin SDK bypasses rules).
+    // Legacy tokens (no userEmail) belong to the owner.
+    match /tokens/{tokenId} {
+      allow read: if isOwner() || (isMember() && resource.data.get('userEmail', '') == myEmail());
+    }
+
+    // Everything else (any depth). Rules OR together, so `tokens` and `members` are excluded here.
     match /{collectionId}/{document=**} {
-      allow read, write: if isOwner() && collectionId != 'tokens';
+      allow read, write: if isMember() && collectionId != 'tokens' && collectionId != 'members';
     }
   }
 }

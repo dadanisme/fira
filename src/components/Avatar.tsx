@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { Actor } from '@shared/types';
+import { actorName } from '@shared/actors';
 import { colorFor } from '@shared/labels';
 import { cx } from '../lib/cx';
 
@@ -7,10 +9,15 @@ export interface AvatarProps {
   /** Size in design px (16 = 1rem; rendered in rem so it follows the root font size); default 18. */
   size?: number;
   className?: string;
+  /** Profile photo; falls back to initials when missing or it fails to load. */
+  photoURL?: string;
+  /** Tooltip; defaults to the actor's name. */
+  title?: string;
 }
 
-/** Initials avatar. Users are round, API tokens (agents) are rounded squares. */
-export function Avatar({ actor, size = 18, className }: AvatarProps) {
+/** Initials avatar (or photo). Users are round, API tokens (agents) are rounded squares. */
+export function Avatar({ actor, size = 18, className, photoURL, title }: AvatarProps) {
+  const [failed, setFailed] = useState<string | null>(null);
   const color = colorFor(actor.id);
   const initials = actor.name
     .split(/\s+/)
@@ -20,9 +27,9 @@ export function Avatar({ actor, size = 18, className }: AvatarProps) {
     .join('');
   return (
     <span
-      title={actor.type === 'token' ? `${actor.name} (API)` : actor.name}
+      title={title ?? (actor.type === 'token' ? `${actorName(actor)} (API)` : actor.name)}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center font-semibold select-none',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden font-semibold select-none',
         actor.type === 'user' ? 'rounded-full' : 'rounded-sm',
         className,
       )}
@@ -34,7 +41,11 @@ export function Avatar({ actor, size = 18, className }: AvatarProps) {
         color: `var(--label-${color}-fg)`,
       }}
     >
-      {initials || '?'}
+      {photoURL && failed !== photoURL ? (
+        <img src={photoURL} alt="" referrerPolicy="no-referrer" className="size-full object-cover" onError={() => setFailed(photoURL)} />
+      ) : (
+        initials || '?'
+      )}
     </span>
   );
 }

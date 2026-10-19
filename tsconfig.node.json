@@ -12,6 +12,8 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    /* scripts/page-save-check.ts imports src/data/pageSave.ts, which uses the SPA alias */
+    "paths": { "@shared/*": ["./shared/*.ts"] },
 
     /* Linting */
     "strict": true,

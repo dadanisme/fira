@@ -3,6 +3,7 @@ import { FirebaseError } from 'firebase/app';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '../components/Button';
 import { Logo } from '../components/Logo';
+import { recordSignIn, watchMembership } from '../data/members';
 import { auth, OWNER_EMAIL } from './firebase';
 
 type AuthState = { status: 'loading' } | { status: 'signedOut'; error?: string } | { status: 'signedIn'; user: User };
@@ -14,26 +15,50 @@ function isOwner(user: User): boolean {
 }
 
 /**
- * Auth gate: renders children only for the signed-in owner (VITE_OWNER_EMAIL).
- * Anyone else is signed out again and shown an error on the sign-in screen.
+ * Auth gate: renders children for the owner (VITE_OWNER_EMAIL) and for verified Google accounts
+ * the owner invited (a `members/{email}` doc, see src/data/members.ts). Membership is watched
+ * live, so removing a member signs them out at once. Anyone else is signed out again and shown
+ * an error on the sign-in screen.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (user) => {
-        if (!user) {
-          setState((s) => ({ status: 'signedOut', error: s.status === 'signedOut' ? s.error : undefined }));
-        } else if (isOwner(user)) {
-          setState({ status: 'signedIn', user });
-        } else {
-          setState({ status: 'signedOut', error: `${user.email ?? 'This account'} is not allowed to use fira.` });
-          void signOut(auth);
+  useEffect(() => {
+    let stopMembership: (() => void) | undefined;
+    const stopAuth = onAuthStateChanged(auth, (user) => {
+      stopMembership?.();
+      stopMembership = undefined;
+      if (!user) {
+        setState((s) => ({ status: 'signedOut', error: s.status === 'signedOut' ? s.error : undefined }));
+        return;
+      }
+      if (isOwner(user)) {
+        setState({ status: 'signedIn', user });
+        recordSignIn(user, true).catch(reportError);
+        return;
+      }
+      const reject = () => {
+        stopMembership?.();
+        stopMembership = undefined;
+        setState({ status: 'signedOut', error: `${user.email ?? 'This account'} hasn't been invited to fira.` });
+        void signOut(auth);
+      };
+      if (!user.email || !user.emailVerified) return reject();
+      let recorded = false;
+      stopMembership = watchMembership(user.email, (member) => {
+        if (!member) return reject();
+        setState((s) => (s.status === 'signedIn' && s.user === user ? s : { status: 'signedIn', user }));
+        if (!recorded) {
+          recorded = true;
+          recordSignIn(user, false).catch(reportError);
         }
-      }),
-    [],
-  );
+      });
+    });
+    return () => {
+      stopAuth();
+      stopMembership?.();
+    };
+  }, []);
 
   if (state.status === 'loading') return null;
   if (state.status === 'signedOut') {
@@ -42,11 +67,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <UserContext.Provider value={state.user}>{children}</UserContext.Provider>;
 }
 
-/** The signed-in owner. Only valid below AuthProvider. */
+/** The signed-in user (owner or member). Only valid below AuthProvider. */
 export function useUser(): User {
   const user = useContext(UserContext);
   if (!user) throw new Error('useUser must be used below AuthProvider');
   return user;
+}
+
+/** Whether the signed-in user is the owner (who alone manages members). Only valid below AuthProvider. */
+export function useIsOwner(): boolean {
+  return isOwner(useUser());
 }
 
 export function signOutUser(): Promise<void> {

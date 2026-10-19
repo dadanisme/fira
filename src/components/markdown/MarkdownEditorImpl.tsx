@@ -12,6 +12,7 @@ import { CommentHighlights, setCommentHighlights } from './commentHighlights';
 import { schemaExtensions } from './schema';
 import { SlashCommand } from './slashCommand';
 import { SlashMenu } from './SlashMenu';
+import { applyExternal } from './applyExternal';
 import { anchorForRange, buildTextIndex } from './textIndex';
 import { FormatBubble, TableBubble } from './Toolbars';
 import './markdown.css';
@@ -32,6 +33,10 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
   const [uploading, setUploading] = useState(0);
   const editorRef = useRef<Editor | null>(null);
   const isPage = variant === 'page';
+  // The editor (and its plugin views) is created during render, before this component
+  // mounts; callbacks that set parent state wait for the mount (see the effect below).
+  const mounted = useRef(false);
+  const pendingTops = useRef<Record<string, number> | null>(null);
 
   const insertImages = useCallback((files: File[], pos?: number) => {
     const upload = latest.current.uploadImage;
@@ -63,7 +68,10 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
       CardMentions.configure({ open: (href) => void navigateRef.current(href) }),
       CommentHighlights.configure({
         onClick: (id) => latest.current.onCommentClick?.(id),
-        onPositions: (tops) => latest.current.onCommentPositions?.(tops),
+        onPositions: (tops) => {
+          if (mounted.current) latest.current.onCommentPositions?.(tops);
+          else pendingTops.current = tops;
+        },
       }),
       ...(isPage ? [SlashCommand.configure({ onKeyDown: (e) => slashKeys.current?.(e) ?? false })] : []),
       Extension.create({
@@ -134,19 +142,22 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
   });
   editorRef.current = editor;
 
-  // External value changes (remote save, version restore) replace the content,
-  // keeping the caret where it was as far as the new document allows.
+  useEffect(() => {
+    mounted.current = true;
+    if (pendingTops.current) {
+      latest.current.onCommentPositions?.(pendingTops.current);
+      pendingTops.current = null;
+    }
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // External value changes (remote save, version restore, template) replace the content.
   useEffect(() => {
     if (value === lastEmitted.current) return;
     lastEmitted.current = value;
-    const { from, to } = editor.state.selection;
-    editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false });
-    const max = editor.state.doc.content.size;
-    try {
-      editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
-    } catch {
-      // Selection not valid in the new document: leave the default.
-    }
+    applyExternal(editor, value);
   }, [editor, value]);
 
   const commentsKey = JSON.stringify(props.comments ?? []);

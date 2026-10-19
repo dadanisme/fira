@@ -8,6 +8,7 @@ import {
   History,
   LayoutTemplate,
   MessageSquare,
+  MessageSquareCheck,
   MoreHorizontal,
   SmilePlus,
   SquareKanban,
@@ -25,12 +26,15 @@ import {
   usePage,
   usePages,
 } from '../../data/pages';
+import { usePagePresence, type PagePresence } from '../../data/presence';
 import { useThreads } from '../../data/threads';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { MarkdownEditor, MarkdownView, type CommentAnchor, type MarkdownEditorHandle } from '../../components/MarkdownEditor';
 import { Menu, MenuItem, MenuSeparator } from '../../components/Menu';
 import { Popover } from '../../components/Popover';
+import { useUser } from '../../lib/auth';
 import { cx } from '../../lib/cx';
 import { remPx } from '../../lib/rem';
 import { duplicate, pageTitle } from './actions';
@@ -81,6 +85,12 @@ function useWide(ref: RefObject<HTMLElement | null>): boolean {
 function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const navigate = useNavigate();
   const save = useAutosave(page);
+  const user = useUser();
+  const me = useMemo(
+    () => ({ uid: user.uid, name: user.displayName ?? user.email ?? 'Someone', photoURL: user.photoURL ?? undefined }),
+    [user.uid, user.displayName, user.email, user.photoURL],
+  );
+  const present = usePagePresence(page.id, me, save.editing && !page.trashed);
   const editor = useRef<MarkdownEditorHandle>(null);
   const root = useRef<HTMLDivElement>(null);
   const wide = useWide(root);
@@ -98,6 +108,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
     [visibleThreads],
   );
   const openThreads = threads.filter((t) => !t.resolved).length;
+  const resolvedThreads = threads.length - openThreads;
 
   const editorBox = useRef<HTMLDivElement>(null);
   const [editorTop, setEditorTop] = useState(0);
@@ -136,7 +147,6 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
     pageId: page.id,
     threads,
     showResolved,
-    onShowResolved: setShowResolved,
     positions,
     activeId,
     onActivate: activate,
@@ -194,6 +204,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             </Link>
           )}
         </nav>
+        <Presence people={present} />
         <SaveStatus status={save.status} />
         {!wide && (
           <IconButton label="Comments" active={commentsOpen} onClick={() => setCommentsOpen(!commentsOpen)}>
@@ -203,6 +214,16 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                 <span className="absolute -top-1.5 -right-2 rounded-full bg-accent px-1 text-2xs leading-3.5 font-semibold text-accent-fg">{openThreads}</span>
               )}
             </span>
+          </IconButton>
+        )}
+        {resolvedThreads > 0 && (
+          <IconButton
+            label={showResolved ? 'Hide resolved comments' : `Show resolved comments (${resolvedThreads})`}
+            active={showResolved}
+            aria-pressed={showResolved}
+            onClick={() => setShowResolved(!showResolved)}
+          >
+            <MessageSquareCheck size="0.9375rem" />
           </IconButton>
         )}
         <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
@@ -242,13 +263,20 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-base">
           <AlertTriangle size="0.9375rem" className="shrink-0 text-warning" />
           <span className="min-w-0 flex-1">
-            <span className="font-medium">{save.conflict.updatedBy.name}</span> changed this page while you were editing. Your edits are not saved yet.
+            {save.conflict.updatedBy.type === 'user' && save.conflict.updatedBy.id === user.uid ? (
+              <>You edited this page in another tab or device.</>
+            ) : (
+              <>
+                <span className="font-medium">{save.conflict.updatedBy.name}</span> edited this page.
+              </>
+            )}{' '}
+            <span className="text-fg-muted">Your changes aren't saved yet.</span>
           </span>
-          <Button size="sm" onClick={save.reloadTheirs}>
-            Reload theirs
+          <Button size="sm" onClick={save.loadTheirs}>
+            Load their version
           </Button>
-          <Button size="sm" variant="primary" onClick={save.keepMine}>
-            Keep mine (overwrite)
+          <Button size="sm" variant="primary" onClick={save.keepMine} title="Save your version on top; theirs stays in version history">
+            Keep mine
           </Button>
         </div>
       )}
@@ -376,9 +404,49 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
 
 function SaveStatus({ status }: { status: ReturnType<typeof useAutosave>['status'] }) {
   if (status === 'idle') return null;
+  const label = { saving: 'Saving…', saved: 'Saved', offline: 'Offline · kept on this device', error: "Couldn't save" }[status];
   return (
-    <span className={cx('shrink-0 px-1 text-sm', status === 'error' ? 'text-danger' : 'text-fg-faint')}>
-      {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : "Couldn't save"}
+    <span
+      className={cx('shrink-0 truncate px-1 text-sm', status === 'error' ? 'text-danger' : status === 'offline' ? 'text-warning' : 'text-fg-faint')}
+      title={status === 'offline' ? 'Your edits are saved in this browser and will be saved to the page when you are back online.' : undefined}
+    >
+      {label}
     </span>
+  );
+}
+
+const MAX_FACES = 4;
+
+/** Avatars of the other people on this page; editors get an accent ring and dot. */
+function Presence({ people }: { people: PagePresence[] }) {
+  if (people.length === 0) return null;
+  const shown = people.slice(0, MAX_FACES);
+  const rest = people.slice(MAX_FACES);
+  return (
+    <div className="flex shrink-0 items-center -space-x-1 px-1">
+      {shown.map((p) => {
+        const label = `${p.name} is ${p.editing ? 'editing' : 'viewing'}`;
+        return (
+          <span key={p.uid} className="relative inline-flex rounded-full ring-2 ring-bg" title={label} aria-label={label}>
+            <Avatar
+              actor={{ type: 'user', id: p.uid, name: p.name }}
+              photoURL={p.photoURL}
+              title={label}
+              size={22}
+              className={cx(p.editing && 'ring-2 ring-accent')}
+            />
+            {p.editing && <span className="absolute -right-0.5 -bottom-0.5 size-2 rounded-full bg-accent ring-2 ring-bg" />}
+          </span>
+        );
+      })}
+      {rest.length > 0 && (
+        <span
+          className="relative inline-flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-sunken px-1 text-2xs font-semibold text-fg-muted ring-2 ring-bg"
+          title={rest.map((p) => `${p.name} is ${p.editing ? 'editing' : 'viewing'}`).join('\n')}
+        >
+          +{rest.length}
+        </span>
+      )}
+    </div>
   );
 }

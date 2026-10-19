@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Activity, ActivityValue, FieldDef, Priority } from '@shared/types';
+import { actorName } from '@shared/actors';
 import { Avatar } from '../../../components/Avatar';
 import { absoluteTime, formatDate, PRIORITY_NAMES, relativeTime } from '../format';
 import { useBoardData } from '../context';
@@ -20,7 +21,7 @@ export function ActivityTimeline({ entries, all, onShowAll }: { entries: readonl
         <li key={e.id} className="flex items-start gap-2 text-sm leading-5 text-fg-muted">
           <Avatar actor={e.actor} size={16} className="mt-0.5" />
           <span className="min-w-0 flex-1">
-            <span className="font-medium text-fg">{e.actor.name}</span> {describe(e, project.fields)}
+            <span className="font-medium text-fg">{actorName(e.actor)}</span> {describe(e, project.fields)}
             {e.count > 1 && <span className="text-fg-faint"> ({e.count}×)</span>}
             <span className="text-fg-faint" title={absoluteTime(e.at)}>
               {' · '}

@@ -30,4 +30,4 @@ Env: see `.env.example` (`.env.local` is not committed). Don't deploy or commit 
 - **Optimistic writes**: snapshots reflect local writes immediately. Don't block UI on mutation promises; handle their errors.
 - **Styling**: Tailwind with the design tokens in `src/index.css` (`bg-surface`, `text-fg-muted`, `border-line`, label colors via `--label-<color>-bg/fg`). No raw colors. Icons: `lucide-react`.
 - **Ownership**: board agent owns `src/features/board` and `src/features/settings`; docs agent owns `src/features/docs` and `src/components/markdown/` (the MarkdownEditor implementation); API agent owns `api/`. Shared files (`shared/`, `src/data/`, `src/components/`, `src/app/`) change only additively and compatibly.
-- Owner email is hardcoded in `firestore.rules` and `storage.rules`; keep in sync with `OWNER_EMAIL`.
+- **Members**: the owner (`OWNER_EMAIL`/`VITE_OWNER_EMAIL`, also hardcoded in `firestore.rules` and `storage.rules`; keep in sync) plus invited `members/{email}` docs. Access checks everywhere go through "owner or members doc exists"; only the owner manages members. `npm run test:rules` tests the rules on the emulators.

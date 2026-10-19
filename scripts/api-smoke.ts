@@ -93,18 +93,19 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- owner + seed data
 
-async function ownerIdToken(): Promise<string> {
+/** Creates an emulator user and signs in, returning its Firebase ID token and uid. */
+async function signInAs(email: string, displayName: string): Promise<{ idToken: string; uid: string }> {
   const host = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1`;
   const password = 'smoke-password';
-  const user = await adminAuth().createUser({ email: OWNER, password, emailVerified: true, displayName: 'Owner' });
+  const user = await adminAuth().createUser({ email, password, emailVerified: true, displayName });
   const res = await fetch(`${host}/accounts:signInWithPassword?key=fake`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: OWNER, password, returnSecureToken: true }),
+    body: JSON.stringify({ email, password, returnSecureToken: true }),
   });
   const { idToken } = (await res.json()) as { idToken: string };
   assert.ok(idToken && user.uid);
-  return idToken;
+  return { idToken, uid: user.uid };
 }
 
 const projectRef = db.collection('projects').doc('proj-smk');
@@ -141,7 +142,7 @@ await db.collection('projects').doc('proj-oth').set({
 });
 await db.collection('labels').doc('lbl-bug').set({ name: 'Bug', color: 'red' });
 
-const idToken = await ownerIdToken();
+const { idToken, uid: ownerUid } = await signInAs(OWNER, 'Owner');
 console.log(`API at ${BASE}\n`);
 
 // ---------------------------------------------------------------- meta + auth
@@ -270,7 +271,7 @@ await test('POST /cards creates an epic, cards and a subtask (numbers, defaults,
   assert.deepEqual(epic.body.labels, []);
   assert.deepEqual(epic.body.fields, {});
   assert.equal(epic.body.archived, false);
-  assert.deepEqual(epic.body.createdBy, { type: 'token', id: epic.body.createdBy.id, name: 'smoke' });
+  assert.deepEqual(epic.body.createdBy, { type: 'token', id: epic.body.createdBy.id, name: 'smoke', via: { id: ownerUid, name: 'Owner' } });
   assert.deepEqual(epic.body.updatedBy, epic.body.createdBy);
   assert.match(epic.body.createdAt, /Z$/);
   keys.epic = epic.body.key;
@@ -925,6 +926,75 @@ await test('POST /cards/{key}/page creates the page from the project template, l
   expectStatus(plain, 201);
   assert.equal(plain.body.page.content, '');
   expectStatus(await call('POST', '/cards/SMK-404/page', { body: {} }), 404);
+});
+
+// ---------------------------------------------------------------- members + per-member tokens
+
+const { hashSecret } = await import('../api/_lib/auth.js');
+const MEMBER = 'alice@example.com';
+const alice = await signInAs('Alice@Example.com', 'Alice');
+const stranger = await signInAs('mallory@example.com', 'Mallory');
+const memberTokens: { secret: string; id: string } = { secret: '', id: '' };
+
+await test('non-member Firebase user → 403 on token management', async () => {
+  expectStatus(await call('GET', '/tokens', { auth: stranger.idToken }), 403, 'forbidden');
+  expectStatus(await call('POST', '/tokens', { auth: stranger.idToken, body: { name: 'nope' } }), 403, 'forbidden');
+  expectStatus(await call('GET', '/tokens', { auth: alice.idToken }), 403, 'forbidden');
+});
+
+await test('member creates a token; its writes carry `via` the member', async () => {
+  await db.collection('members').doc(MEMBER).set({ email: MEMBER, role: 'member', addedAt: new Date(), addedBy: OWNER });
+  const res = await call('POST', '/tokens', { auth: alice.idToken, body: { name: 'CI bot' } });
+  expectStatus(res, 201);
+  assert.equal(res.body.token.userEmail, MEMBER);
+  assert.equal(res.body.token.userId, alice.uid);
+  assert.equal(res.body.token.userName, 'Alice');
+  memberTokens.secret = res.body.secret;
+  memberTokens.id = res.body.token.id;
+  const me = await call('GET', '/me', { auth: memberTokens.secret });
+  expectStatus(me, 200);
+  assert.deepEqual(me.body, { type: 'token', id: memberTokens.id, name: 'CI bot', via: { id: alice.uid, name: 'Alice' } });
+  const card = await call('POST', '/cards', { auth: memberTokens.secret, body: { project: 'OTH', title: 'From CI' } });
+  expectStatus(card, 201);
+  assert.deepEqual(card.body.createdBy.via, { id: alice.uid, name: 'Alice' });
+  const acts = await activityOf(card.body.id);
+  assert.deepEqual(acts[0].actor.via, { id: alice.uid, name: 'Alice' });
+});
+
+await test("member lists only their own tokens; owner lists everyone's; members can't revoke others'", async () => {
+  const mine = await call('GET', '/tokens', { auth: alice.idToken });
+  expectStatus(mine, 200);
+  assert.deepEqual(
+    mine.body.items.map((t: { id: string }) => t.id),
+    [memberTokens.id],
+  );
+  const all = await call('GET', '/tokens', { auth: idToken });
+  expectStatus(all, 200);
+  assert.ok(all.body.items.length >= 3);
+  assert.ok(all.body.items.some((t: { id: string; userEmail?: string }) => t.id === memberTokens.id && t.userEmail === MEMBER));
+  const times = all.body.items.map((t: { createdAt: string }) => t.createdAt);
+  assert.deepEqual(times, [...times].sort().reverse(), 'newest first');
+  const ownerToken = all.body.items.find((t: { userEmail?: string }) => t.userEmail === OWNER);
+  expectStatus(await call('DELETE', `/tokens/${ownerToken.id}`, { auth: alice.idToken }), 404, 'not_found');
+});
+
+await test('legacy token without a creator works (no `via`)', async () => {
+  const legacy = `fira_${'L'.repeat(32)}`;
+  await db.collection('tokens').doc('legacy').set({ name: 'old', color: 'gray', hash: hashSecret(legacy), prefix: legacy.slice(0, 8), createdAt: new Date(), revoked: false });
+  const me = await call('GET', '/me', { auth: legacy });
+  expectStatus(me, 200);
+  assert.deepEqual(me.body, { type: 'token', id: 'legacy', name: 'old' });
+});
+
+await test("removing a member makes their token 401 and their ID token 403", async () => {
+  await db.collection('members').doc(MEMBER).delete();
+  expectStatus(await call('GET', '/me', { auth: memberTokens.secret }), 401, 'unauthorized');
+  expectStatus(await call('GET', '/cards?project=OTH', { auth: memberTokens.secret }), 401, 'unauthorized');
+  expectStatus(await call('GET', '/tokens', { auth: alice.idToken }), 403, 'forbidden');
+  // The owner's own tokens are unaffected; re-inviting restores the member's token.
+  expectStatus(await call('GET', '/me'), 200);
+  await db.collection('members').doc(MEMBER).set({ email: MEMBER, role: 'member', addedAt: new Date(), addedBy: OWNER });
+  expectStatus(await call('GET', '/me', { auth: memberTokens.secret }), 200);
 });
 
 // ---------------------------------------------------------------- done
