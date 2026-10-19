@@ -54,7 +54,11 @@ export function TokensSettings() {
         description={
           <>
             Personal tokens for agents calling <code className="text-[12px]">/api/v1</code> with <code className="text-[12px]">Authorization: Bearer fira_…</code>.
-            Their changes show up as the token's name.
+            Their changes show up as the token's name.{' '}
+            {/* A static page outside the SPA (public/docs/api), so a plain link, not a router Link. */}
+            <a href="/docs/api" target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">
+              API documentation →
+            </a>
           </>
         }
       />

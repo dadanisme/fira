@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fira API</title>
+    <meta name="description" content="Reference and getting-started guide for the fira REST API: cards, comments, attachments, pages and threads." />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)" />
+    <!--
+      fira API reference: a static page outside the SPA bundle (vercel.json keeps /docs/api
+      out of the SPA fallback). Scalar renders /api/v1/openapi.json (api/_lib/openapi.ts).
+      Colors mirror the tokens in src/index.css; --brand is the logo accent.
+      Scalar puts .light-mode / .dark-mode on <body>, following the OS; the doubled class
+      selectors outrank its built-in theme regardless of stylesheet order.
+    -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        --brand: #f55d3f;
+        --fira-font: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        --fira-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --scalar-custom-header-height: 48px;
+        --scalar-font: var(--fira-font);
+        --scalar-font-code: var(--fira-mono);
+      }
+
+      .light-mode.light-mode,
+      body:not(.dark-mode) {
+        --fira-bg: #ffffff;
+        --fira-sidebar: #f7f7f8;
+        --fira-fg: #18181b;
+        --fira-fg-muted: #5f5f6a;
+        --fira-line: #e7e7ea;
+        --fira-hover: rgb(0 0 0 / 0.045);
+
+        --scalar-background-1: #ffffff;
+        --scalar-background-2: #f7f7f8;
+        --scalar-background-3: #ececee;
+        --scalar-background-accent: rgb(245 93 63 / 0.1);
+        --scalar-color-1: #18181b;
+        --scalar-color-2: #5f5f6a;
+        --scalar-color-3: #9a9aa3;
+        --scalar-color-accent: var(--brand);
+        --scalar-border-color: #e7e7ea;
+        --scalar-button-1: var(--brand);
+        --scalar-button-1-hover: #e04e31;
+        --scalar-button-1-color: #ffffff;
+        --scalar-link-color-hover: var(--brand);
+        --scalar-sidebar-background-1: #f7f7f8;
+        --scalar-sidebar-item-hover-background: rgb(0 0 0 / 0.045);
+        --scalar-sidebar-item-active-background: rgb(245 93 63 / 0.1);
+        --scalar-sidebar-color-active: #c23f24;
+        --scalar-sidebar-search-background: #ffffff;
+        --scalar-sidebar-search-border-color: #e7e7ea;
+      }
+
+      .dark-mode.dark-mode {
+        --fira-bg: #161618;
+        --fira-sidebar: #1b1b1e;
+        --fira-fg: #ececee;
+        --fira-fg-muted: #a0a0aa;
+        --fira-line: #2b2b30;
+        --fira-hover: rgb(255 255 255 / 0.05);
+
+        --scalar-background-1: #161618;
+        --scalar-background-2: #1f1f22;
+        --scalar-background-3: #2b2b30;
+        --scalar-background-accent: rgb(245 93 63 / 0.16);
+        --scalar-color-1: #ececee;
+        --scalar-color-2: #a0a0aa;
+        --scalar-color-3: #6c6c76;
+        --scalar-color-accent: #ff7a5c;
+        --scalar-border-color: #2b2b30;
+        --scalar-button-1: var(--brand);
+        --scalar-button-1-hover: #ff6f50;
+        --scalar-button-1-color: #ffffff;
+        --scalar-link-color-hover: #ff7a5c;
+        --scalar-sidebar-background-1: #1b1b1e;
+        --scalar-sidebar-item-hover-background: rgb(255 255 255 / 0.05);
+        --scalar-sidebar-item-active-background: rgb(245 93 63 / 0.16);
+        --scalar-sidebar-color-active: #ff8a6e;
+        --scalar-sidebar-search-background: #161618;
+        --scalar-sidebar-search-border-color: #2b2b30;
+      }
+
+      /* Before Scalar sets its class (and without JS), follow the OS. */
+      @media (prefers-color-scheme: dark) {
+        body:not(.light-mode):not(.dark-mode) {
+          --fira-bg: #161618;
+          --fira-sidebar: #1b1b1e;
+          --fira-fg: #ececee;
+          --fira-fg-muted: #a0a0aa;
+          --fira-line: #2b2b30;
+          --fira-hover: rgb(255 255 255 / 0.05);
+        }
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--fira-bg);
+        color: var(--fira-fg);
+        font-family: var(--fira-font);
+      }
+
+      .fira-header {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: var(--scalar-custom-header-height);
+        padding: 0 16px;
+        background: var(--fira-sidebar);
+        border-bottom: 1px solid var(--fira-line);
+        font-size: 13px;
+      }
+      .fira-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--fira-fg);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+      .fira-brand svg {
+        width: 22px;
+        height: 22px;
+        color: var(--fira-fg);
+      }
+      .fira-chip {
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: rgb(245 93 63 / 0.12);
+        color: var(--brand);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .fira-header nav {
+        display: flex;
+        gap: 2px;
+        margin-left: auto;
+      }
+      .fira-header nav a {
+        padding: 4px 8px;
+        border-radius: 6px;
+        color: var(--fira-fg-muted);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .fira-header nav a:hover {
+        background: var(--fira-hover);
+        color: var(--fira-fg);
+      }
+      @media (max-width: 480px) {
+        .fira-header nav .fira-optional {
+          display: none;
+        }
+      }
+      .fira-noscript {
+        max-width: 640px;
+        margin: 48px auto;
+        padding: 0 16px;
+        line-height: 1.5;
+      }
+      .fira-noscript a {
+        color: var(--brand);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="fira-header">
+      <a class="fira-brand" href="/docs/api" aria-label="fira API reference">
+        <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <g fill="currentColor">
+            <path d="M20 25V17A16 16 0 0 1 36 1V11A6 6 0 0 0 30 17V25Z" />
+            <path d="M38 1H52A2 2 0 0 1 54 3V9A2 2 0 0 1 52 11H38Z" />
+            <path d="M18 27V37H12A2 2 0 0 1 10 35V29A2 2 0 0 1 12 27Z" />
+            <rect x="32" y="27" width="10" height="10" />
+            <path d="M44 27H52A2 2 0 0 1 54 29V35A2 2 0 0 1 52 37H44Z" />
+            <path d="M20 39H30V61A2 2 0 0 1 28 63H22A2 2 0 0 1 20 61Z" />
+          </g>
+          <rect x="20" y="27" width="10" height="10" fill="#F55D3F" />
+        </svg>
+        fira
+        <span class="fira-chip">API</span>
+      </a>
+      <nav aria-label="Links">
+        <a class="fira-optional" href="/api/v1/openapi.json">OpenAPI JSON</a>
+        <a href="/settings/tokens">API tokens</a>
+        <a href="/">Open fira →</a>
+      </nav>
+    </header>
+
+    <div id="app"></div>
+    <noscript>
+      <div class="fira-noscript">
+        The API reference needs JavaScript. The raw OpenAPI document is at
+        <a href="/api/v1/openapi.json">/api/v1/openapi.json</a>.
+      </div>
+    </noscript>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.4/dist/browser/standalone.js"
+      integrity="sha384-omTRdD9MbjA1vm12DqRUVvqJlr3VzSixvAdF1Jruu9AJOiJKyTKraIB6DyX+m10M"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      Scalar.createApiReference('#app', {
+        url: '/api/v1/openapi.json',
+        // The document's server is relative (`/api/v1`): requests go to this origin.
+        baseServerURL: window.location.origin,
+        authentication: { preferredSecurityScheme: 'bearerToken' },
+        // Keep the pasted token across reloads, in this browser's local storage only.
+        persistAuth: true,
+        defaultHttpClient: { targetKey: 'shell', clientKey: 'curl' },
+        documentDownloadType: 'json',
+        hideDarkModeToggle: true, // follow the OS, like the app
+        withDefaultFonts: false, // system font, like the app
+        showDeveloperTools: 'never',
+        agent: { disabled: true }, // no hosted "Ask AI"
+        mcp: { disabled: true },
+        telemetry: false,
+        favicon: '/favicon.svg',
+        metaData: { title: 'fira API' },
+      })
+    </script>
+  </body>
+</html>

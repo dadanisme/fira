@@ -22,4 +22,7 @@ Env vars: see `.env.example`.
 
 ## API
 
-REST API under `/api/v1`, authenticated with personal tokens (`Authorization: Bearer fira_…`, created in Settings). OpenAPI spec: [`/api/v1/openapi.json`](https://fira-six.vercel.app/api/v1/openapi.json).
+REST API under `/api/v1`, authenticated with personal tokens (`Authorization: Bearer fira_…`, created in Settings → API tokens).
+
+- **API documentation:** https://fira-six.vercel.app/docs/api (getting started guide, reference, try-it-out)
+- OpenAPI spec: [`/api/v1/openapi.json`](https://fira-six.vercel.app/api/v1/openapi.json), written by hand in `api/_lib/openapi.ts`; the docs page is the static `public/docs/api/index.html` (Scalar, loaded from a CDN, so it is not part of the app bundle).

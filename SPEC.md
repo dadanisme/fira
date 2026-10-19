@@ -81,6 +81,7 @@ Firestore rules: only the owner (`request.auth.token.email == OWNER_EMAIL` and `
 - Card search filters in memory after loading the project's cards (scale is hundreds, not millions) — no composite indexes needed.
 - Cards are addressed by key (`NI-12`); statuses accepted by column name (case-insensitive) or id; responses include both `status` (name) and `statusId`.
 - Pagination: `limit` (default 50, max 200) + opaque `cursor`; response `{ items, nextCursor }`.
+- Docs: public API reference at `/docs/api` — a static page (`public/docs/api/index.html`, Scalar from a CDN, outside the SPA bundle) rendering `/api/v1/openapi.json`, whose `info.description` is the getting-started guide.
 
 Endpoints:
 
