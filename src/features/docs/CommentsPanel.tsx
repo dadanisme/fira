@@ -44,23 +44,24 @@ export function CommentsPanel(props: CommentsPanelProps) {
   const resolvedCount = threads.filter((t) => t.resolved).length;
 
   // Aligned layout: each card wants its highlight's top; push down to avoid overlaps.
+  // Orphaned threads sit at the top (they have no highlight to follow), anchored ones flow below them.
   const refs = useRef(new Map<string, HTMLElement>());
+  const orphansRef = useRef<HTMLDivElement>(null);
   const [tops, setTops] = useState<Record<string, number>>({});
-  const [orphanTop, setOrphanTop] = useState(0);
+  const [bottom, setBottom] = useState(0);
   useLayoutEffect(() => {
     if (!aligned) return;
     const entries: { id: string; want: number }[] = anchored.map((t) => ({ id: t.id, want: positions[t.id] }));
     if (pending) entries.push({ id: 'pending', want: props.pendingTop });
     entries.sort((a, b) => a.want - b.want);
-    // Keep the active card at its highlight; others flow around it.
     const next: Record<string, number> = {};
-    let bottom = 0;
+    let end = orphansRef.current ? orphansRef.current.offsetHeight + 16 : 0;
     for (const e of entries) {
-      const top = Math.max(e.want, bottom);
+      const top = Math.max(e.want, end);
       next[e.id] = top;
-      bottom = top + (refs.current.get(e.id)?.offsetHeight ?? 80) + GAP;
+      end = top + (refs.current.get(e.id)?.offsetHeight ?? 80) + GAP;
     }
-    setOrphanTop(bottom + 16);
+    setBottom(end);
     setTops((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   });
 
@@ -80,16 +81,25 @@ export function CommentsPanel(props: CommentsPanelProps) {
   );
 
   return (
-    <div className="flex flex-col gap-2">
+    // Aligned: fill the aside (the article's height) so the sticky header stays up for the whole page.
+    <div className={cx('flex flex-col gap-2', aligned && 'min-h-full')}>
       <div className="sticky top-0 z-10 -mx-1 flex h-6 items-center justify-between bg-bg px-1 text-xs font-medium text-fg-faint">
-        <span>Comments</span>
+        <span>Comments{visible.length > 0 && ` · ${visible.length}`}</span>
         {resolvedCount > 0 && (
           <button type="button" onClick={() => props.onShowResolved(!showResolved)} className="rounded px-1 hover:bg-hover hover:text-fg">
             {showResolved ? 'Hide resolved' : `Show resolved (${resolvedCount})`}
           </button>
         )}
       </div>
-      <div className={cx(aligned && 'relative')} style={aligned ? { minHeight: orphanTop } : undefined}>
+      <div className={cx(aligned && 'relative')} style={aligned ? { minHeight: bottom } : undefined}>
+        {orphaned.length > 0 && (
+          <div ref={orphansRef} className={cx('flex flex-col gap-2', aligned && 'absolute top-0 right-0 left-0', !aligned && 'mb-2')}>
+            <div className="text-xs font-medium text-fg-faint">Text no longer found</div>
+            {orphaned.map((t) => (
+              <ThreadCard key={t.id} pageId={props.pageId} thread={t} active={props.activeId === t.id} onActivate={() => props.onActivate(t.id)} />
+            ))}
+          </div>
+        )}
         {pending && (
           <NewThread
             pageId={props.pageId}
@@ -103,15 +113,11 @@ export function CommentsPanel(props: CommentsPanelProps) {
           />
         )}
         <div className={cx(!aligned && 'flex flex-col gap-2')}>{anchored.map(card)}</div>
-        {orphaned.length > 0 && (
-          <div className={cx('flex flex-col gap-2', aligned && 'absolute right-0 left-0')} style={aligned ? { top: orphanTop } : undefined}>
-            <div className="pt-2 text-xs font-medium text-fg-faint">Text no longer found</div>
-            {orphaned.map((t) => (
-              <ThreadCard key={t.id} pageId={props.pageId} thread={t} active={props.activeId === t.id} onActivate={() => props.onActivate(t.id)} />
-            ))}
-          </div>
+        {visible.length === 0 && !pending && (
+          <p className="text-sm text-fg-faint">
+            {resolvedCount > 0 ? 'All comments are resolved. ' : ''}Select text and choose Comment to start a thread.
+          </p>
         )}
-        {visible.length === 0 && !pending && <p className="text-sm text-fg-faint">Select text and choose Comment to start a thread.</p>}
       </div>
     </div>
   );
