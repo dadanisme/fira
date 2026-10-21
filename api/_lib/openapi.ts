@@ -8,7 +8,7 @@ import { LIMITS, WORKSPACE_SLUG_RE } from '../../shared/workspaces.js';
  * checks that every route is documented and every documented route exists.
  */
 
-const SITE = 'https://fira-six.vercel.app';
+const SITE = 'https://fira.muhammadramdan.com';
 const BASE = `${SITE}/api/v1`;
 const DOCS = `${SITE}/docs/api`;
 const WID = 'Ws3Kq8Lm1Vx6Rt9Hn2Zc';

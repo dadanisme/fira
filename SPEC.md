@@ -38,7 +38,7 @@ firestore.rules, firestore.indexes.json, storage.rules, firebase.json
 vercel.json
 ```
 
-Env vars: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_APP_ID` (client), `VITE_USE_EMULATORS` (client, dev only: `1` = local emulators of `demo-fira`, used by `npm run dev:emu`); `FIREBASE_SERVICE_ACCOUNT` (JSON, server), `RESEND_API_KEY` (server; unset = invites are created but not emailed), `INVITE_FROM` (server, `Fira <invites@mail.muhammadramdan.com>`), `APP_URL` (server, `https://fira-six.vercel.app`, for links in emails). No owner email anywhere.
+Env vars: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_APP_ID` (client), `VITE_USE_EMULATORS` (client, dev only: `1` = local emulators of `demo-fira`, used by `npm run dev:emu`); `FIREBASE_SERVICE_ACCOUNT` (JSON, server), `RESEND_API_KEY` (server; unset = invites are created but not emailed), `INVITE_FROM` (server, `Fira <invites@mail.muhammadramdan.com>`), `APP_URL` (server, `https://fira.muhammadramdan.com`, for links in emails). No owner email anywhere.
 
 ## Data model (Firestore)
 

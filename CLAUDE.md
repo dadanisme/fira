@@ -1,6 +1,6 @@
 # fira
 
-Multi-tenant Jira + Confluence replacement: any Google user signs in and works in workspaces they own or were invited to. **SPEC.md is the source of truth** (data model, API, rules, behavior); update it with any behavior change. Live at https://fira-six.vercel.app (Firebase project `fira-dadanisme`).
+Multi-tenant Jira + Confluence replacement: any Google user signs in and works in workspaces they own or were invited to. **SPEC.md is the source of truth** (data model, API, rules, behavior); update it with any behavior change. Live at https://fira.muhammadramdan.com (the old https://fira-six.vercel.app redirects there, except `/api/`, which it still serves; Firebase project `fira-dadanisme`).
 
 ## Commands
 

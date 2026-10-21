@@ -15,6 +15,9 @@ export function activeSlug(): string | null {
   }
 }
 
+/** The app's public origins; absolute links on any of them stay in the app. */
+const APP_ORIGINS = ['https://fira.muhammadramdan.com', 'https://fira-six.vercel.app'];
+
 /**
  * The in-app path a Markdown link points to, or null when it leaves the app (other sites,
  * `mailto:`, `/api/...`). In-app links are root-relative paths or absolute URLs on this
@@ -34,7 +37,7 @@ export function inAppPath(href: unknown): string | null {
     } catch {
       return null;
     }
-    if (url.origin !== window.location.origin) return null;
+    if (url.origin !== window.location.origin && !APP_ORIGINS.includes(url.origin)) return null;
     path = url.pathname + url.search + url.hash;
   }
   if (WORKSPACE_SECTION.test(path)) {

@@ -8,7 +8,7 @@ import type { InviteRole } from '../../shared/types.js';
  */
 
 const DEFAULT_FROM = 'Fira <invites@mail.muhammadramdan.com>';
-const DEFAULT_APP_URL = 'https://fira-six.vercel.app';
+const DEFAULT_APP_URL = 'https://fira.muhammadramdan.com';
 const TIMEOUT_MS = 5000;
 
 export type SendResult = { ok: true } | { ok: false; error: string };

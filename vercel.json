@@ -4,12 +4,39 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/index.ts": { "maxDuration": 30 }
+    "api/index.ts": {
+      "maxDuration": 30
+    }
   },
+  "redirects": [
+    {
+      "source": "/((?!api/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "fira-six.vercel.app"
+        }
+      ],
+      "destination": "https://fira.muhammadramdan.com/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
-    { "source": "/api/v1/:__route*", "destination": "/api?__route=:__route*" },
-    { "source": "/docs/api", "destination": "/docs/api/index.html" },
-    { "source": "/docs/api/", "destination": "/docs/api/index.html" },
-    { "source": "/((?!api/|docs/api).*)", "destination": "/index.html" }
+    {
+      "source": "/api/v1/:__route*",
+      "destination": "/api?__route=:__route*"
+    },
+    {
+      "source": "/docs/api",
+      "destination": "/docs/api/index.html"
+    },
+    {
+      "source": "/docs/api/",
+      "destination": "/docs/api/index.html"
+    },
+    {
+      "source": "/((?!api/|docs/api).*)",
+      "destination": "/index.html"
+    }
   ]
 }
