@@ -4,6 +4,7 @@ import type { ApiToken, LabelColor, Member } from '@shared/types';
 import { colorFor } from '@shared/labels';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { confirmAction } from '../../components/ConfirmDialog';
 import { Input } from '../../components/Input';
 import { useMembers } from '../../data/members';
 import { createToken, listTokens, revokeToken } from '../../data/tokens';
@@ -21,7 +22,7 @@ import { PageTitle, RowList, SettingsSection } from './ui';
  * Members see their own tokens; admins and the owner see everyone's, with who created each.
  */
 export function TokensSettings() {
-  const owner = useIsAdmin();
+  const admin = useIsAdmin();
   const wid = useWorkspaceId();
   const user = useUser();
   const { data: members } = useMembers();
@@ -43,7 +44,13 @@ export function TokensSettings() {
   useEffect(load, [load]);
 
   const revoke = async (t: ApiToken) => {
-    if (!confirm(`Revoke “${t.name}”? Agents using it stop working immediately.`)) return;
+    const ok = await confirmAction({
+      title: `Revoke “${t.name}”?`,
+      body: 'Agents using it stop working immediately.',
+      confirmLabel: 'Revoke',
+      danger: true,
+    });
+    if (!ok) return;
     setTokens((list) => list?.map((x) => (x.id === t.id ? { ...x, revoked: true } : x)) ?? null);
     try {
       const updated = await revokeToken(wid, t.id);
@@ -63,9 +70,9 @@ export function TokensSettings() {
         title="API tokens"
         description={
           <>
-            Personal tokens for agents calling <code className="text-sm">/api/v1</code> with <code className="text-sm">Authorization: Bearer fira_…</code>.
+            Personal tokens for agents, each scoped to this workspace, calling <code className="text-sm">/api/v1</code> with <code className="text-sm">Authorization: Bearer fira_…</code>.
             Their changes show up under the token's name and yours, e.g. “agen (via {user.displayName ?? 'you'})”.
-            {owner && ' As an admin, you see and can revoke every member’s tokens.'}{' '}
+            {admin && ' As an admin, you see and can revoke every member’s tokens in this workspace.'}{' '}
             {/* A static page outside the SPA (public/docs/api), so a plain link, not a router Link. */}
             <a href="/docs/api" target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">
               API documentation →
@@ -100,7 +107,7 @@ export function TokensSettings() {
         ) : (
           <RowList>
             {active.map((t) => (
-              <TokenRow key={t.id} token={t} creator={owner ? creatorOf(t, members) : undefined} onRevoke={() => void revoke(t)} />
+              <TokenRow key={t.id} token={t} creator={admin ? creatorOf(t, members) : undefined} onRevoke={() => void revoke(t)} />
             ))}
           </RowList>
         )}
@@ -113,7 +120,7 @@ export function TokensSettings() {
               <div className="mt-2">
                 <RowList>
                   {revoked.map((t) => (
-                    <TokenRow key={t.id} token={t} creator={owner ? creatorOf(t, members) : undefined} />
+                    <TokenRow key={t.id} token={t} creator={admin ? creatorOf(t, members) : undefined} />
                   ))}
                 </RowList>
               </div>

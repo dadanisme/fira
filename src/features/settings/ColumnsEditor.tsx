@@ -12,6 +12,7 @@ import { cx } from '../../lib/cx';
 import { columnCardCounts, deleteBlockedReason, useColumns } from '../board/columns';
 import { EditableText } from '../board/panel/EditableText';
 import { RowList, SettingsSection } from './ui';
+import { confirmAction } from '../../components/ConfirmDialog';
 
 export function ColumnsEditor({ project }: { project: Project }) {
   const { data: cards } = useCards(project.id);
@@ -106,7 +107,9 @@ function ColumnRow({
         <IconButton
           label={blocked ?? `Delete ${column.name}`}
           disabled={Boolean(blocked)}
-          onClick={() => confirm(`Delete column “${column.name}”?`) && onDelete()}
+          onClick={() =>
+            void confirmAction({ title: `Delete column “${column.name}”?`, confirmLabel: 'Delete', danger: true }).then((ok) => ok && onDelete())
+          }
           className="hover:text-danger"
         >
           <Trash size="0.8125rem" />

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router';
-import { KeyRound, Plus, Tag, Users } from 'lucide-react';
+import { Building2, KeyRound, Plus, Tag, Users } from 'lucide-react';
 import { useProjects } from '../../data/projects';
 import { useWsPath } from '../../data/workspace';
 import { NewProjectForm } from '../../app/NewProjectForm';
@@ -10,9 +10,10 @@ import { LabelsSettings } from './LabelsSettings';
 import { MembersSettings } from './MembersSettings';
 import { ProjectSettings } from './ProjectSettings';
 import { TokensSettings } from './TokensSettings';
+import { WorkspaceSettings } from './WorkspaceSettings';
 import { PageTitle } from './ui';
 
-/** `/w/:slug/settings/*`: projects (name, work pages, columns, fields), labels, members, API tokens. */
+/** `/w/:slug/settings/*`: projects (name, work pages, columns, fields), workspace (general), labels, members, API tokens. */
 export default function SettingsPage() {
   const { data: projects, loading } = useProjects();
   const ws = useWsPath();
@@ -32,6 +33,9 @@ export default function SettingsPage() {
         </div>
         <div>
           <div className="flex h-7 items-center px-2 text-xs font-medium text-fg-faint">Workspace</div>
+          <Item to="workspace" icon={<Building2 size="0.875rem" />}>
+            General
+          </Item>
           <Item to="labels" icon={<Tag size="0.875rem" />}>
             Labels
           </Item>
@@ -52,6 +56,7 @@ export default function SettingsPage() {
             />
             <Route path="projects/new" element={<NewProject />} />
             <Route path="projects/:projectKey" element={<ProjectRoute />} />
+            <Route path="workspace" element={<WorkspaceSettings />} />
             <Route path="labels" element={<LabelsSettings />} />
             <Route path="members" element={<MembersSettings />} />
             <Route path="tokens" element={<TokensSettings />} />

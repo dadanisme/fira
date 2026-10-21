@@ -9,6 +9,7 @@ import { Select } from '../../components/Select';
 import { run } from '../board/context';
 import { EditableText } from '../board/panel/EditableText';
 import { RowList, SettingsSection } from './ui';
+import { confirmAction } from '../../components/ConfirmDialog';
 
 const TYPE_NAMES: Record<FieldType, string> = {
   text: 'Text',
@@ -72,8 +73,12 @@ export function FieldsEditor({ project }: { project: Project }) {
                   value={f.type}
                   onChange={(e) => {
                     const t = e.target.value as FieldType;
-                    if (t === f.type || !confirm(`Change “${f.name}” to ${TYPE_NAMES[t]}? Existing values that don't fit will look empty.`)) return;
-                    patch(f.id, { type: t, ...(hasOptions(t) && { options: f.options ?? [] }) });
+                    if (t === f.type) return;
+                    void confirmAction({
+                      title: `Change “${f.name}” to ${TYPE_NAMES[t]}?`,
+                      body: "Existing values that don't fit will look empty.",
+                      confirmLabel: 'Change type',
+                    }).then((ok) => ok && patch(f.id, { type: t, ...(hasOptions(t) && { options: f.options ?? [] }) }));
                   }}
                 >
                   {FIELD_TYPES.map((t) => (
@@ -91,7 +96,14 @@ export function FieldsEditor({ project }: { project: Project }) {
                 <IconButton
                   label={`Delete ${f.name}`}
                   className="hover:text-danger"
-                  onClick={() => confirm(`Delete field “${f.name}”? Values stay on cards but are no longer shown.`) && save(fields.filter((x) => x.id !== f.id))}
+                  onClick={() =>
+                    void confirmAction({
+                      title: `Delete field “${f.name}”?`,
+                      body: 'Values stay on cards but are no longer shown.',
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    }).then((ok) => ok && save(fields.filter((x) => x.id !== f.id)))
+                  }
                 >
                   <Trash size="0.8125rem" />
                 </IconButton>

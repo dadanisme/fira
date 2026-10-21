@@ -1,5 +1,6 @@
 import { Suspense, useRef, type CSSProperties } from 'react';
 import { Outlet } from 'react-router';
+import { ConfirmHost } from '../components/ConfirmDialog';
 import { cx } from '../lib/cx';
 import { Sidebar } from './Sidebar';
 import { ExpandButton, PeekEdge } from './SidebarControls';
@@ -44,6 +45,7 @@ export function Layout() {
             <Outlet />
           </Suspense>
         </main>
+        <ConfirmHost />
       </div>
     </SidebarContext>
   );

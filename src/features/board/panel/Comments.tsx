@@ -11,6 +11,7 @@ import { MarkdownEditor, MarkdownView, type MarkdownEditorHandle } from '../../.
 import { run } from '../context';
 import { absoluteTime, relativeTime } from '../format';
 import { blurActive } from '../hooks';
+import { confirmAction } from '../../../components/ConfirmDialog';
 
 /** Comments tab: composer on top, comments newest first. `comments` come oldest first from useComments. */
 export function Comments({ card, comments }: { card: Card; comments: readonly Comment[] }) {
@@ -106,7 +107,11 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
                 size="sm"
                 label="Delete comment"
                 className="hover:text-danger"
-                onClick={() => confirm('Delete this comment?') && run(() => deleteComment(cardId, c.id))}
+                onClick={() =>
+                  void confirmAction({ title: 'Delete this comment?', confirmLabel: 'Delete', danger: true }).then(
+                    (ok) => ok && run(() => deleteComment(cardId, c.id)),
+                  )
+                }
               >
                 <Trash size="0.75rem" />
               </IconButton>

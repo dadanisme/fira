@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Download, File as FileIcon, Paperclip, Trash } from 'lucide-react';
 import type { Attachment, Card } from '@shared/types';
 import { attachmentUrl, deleteAttachment, uploadAttachment, useAttachments } from '../../../data/attachments';
+import { uploadError } from '../../../data/uploads';
 import { IconButton } from '../../../components/IconButton';
 import { cx } from '../../../lib/cx';
 import { run } from '../context';
 import { absoluteTime, formatBytes, relativeTime } from '../format';
 import { toastError } from '../toast';
 import { Section } from './Section';
+import { confirmAction } from '../../../components/ConfirmDialog';
 
 /** Download URLs, cached per storage path for the session. */
 const urlCache = new Map<string, Promise<string>>();
@@ -33,7 +35,7 @@ export function Attachments({ card }: { card: Card }) {
       const id = nextId.current++;
       setUploading((u) => [...u, { id, name: file.name }]);
       uploadAttachment(card.id, file)
-        .catch(toastError)
+        .catch((err) => toastError(uploadError(err, file)))
         .finally(() => setUploading((u) => u.filter((x) => x.id !== id)));
     }
   };
@@ -118,7 +120,9 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
   }, [a]);
 
   const remove = () => {
-    if (confirm(`Delete “${a.name}”?`)) run(() => deleteAttachment(cardId, a));
+    void confirmAction({ title: `Delete “${a.name}”?`, confirmLabel: 'Delete', danger: true }).then(
+      (ok) => ok && run(() => deleteAttachment(cardId, a)),
+    );
   };
 
   return (

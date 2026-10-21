@@ -56,7 +56,7 @@ export default function BoardPage() {
       <div className="flex flex-1 items-center justify-center text-fg-muted">
         <div className="text-center">
           <p>No project with key “{projectKey}”.</p>
-          <Link to="/" className="text-accent hover:underline">
+          <Link to={ws()} className="text-accent hover:underline">
             Go home
           </Link>
         </div>

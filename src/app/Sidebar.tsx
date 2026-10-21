@@ -1,15 +1,18 @@
 import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
-import { LayoutGrid, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { ChevronsUpDown, LayoutGrid, LogOut, Mail, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { wsPath } from '@shared/workspaces';
 import { useProjects } from '../data/projects';
-import { useWsPath } from '../data/workspace';
+import { useMyInvites, useMyMemberships } from '../data/members';
+import { useWorkspace, useWsPath } from '../data/workspace';
 import { signOutUser, useUser } from '../lib/auth';
 import { Avatar } from '../components/Avatar';
 import { IconButton } from '../components/IconButton';
-import { Logo } from '../components/Logo';
-import { Menu, MenuItem } from '../components/Menu';
+import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu';
 import { Popover } from '../components/Popover';
+import { WorkspaceIcon } from '../components/WorkspaceIcon';
 import { cx } from '../lib/cx';
+import type { LandingState } from './Landing';
 import { NewProjectForm } from './NewProjectForm';
 import { SidebarLink, SidebarSection } from './SidebarSection';
 import { ResizeHandle } from './SidebarControls';
@@ -55,9 +58,8 @@ export function Sidebar() {
         s.docked && 'group-data-snap/shell:-translate-x-full',
       )}
     >
-      <div className="group/header flex h-11 shrink-0 items-center gap-2 pr-2 pl-4 text-md font-semibold tracking-tight">
-        <Logo size={16} />
-        <span className="flex-1">fira</span>
+      <div className="group/header flex h-11 shrink-0 items-center gap-1 pr-2 pl-2">
+        <WorkspaceSwitcher />
         <IconButton
           id="sidebar-toggle"
           label={pinnable ? 'Keep sidebar open' : 'Close sidebar'}
@@ -130,7 +132,6 @@ function ProjectsSection() {
 
 function UserMenu() {
   const user = useUser();
-  const navigate = useNavigate();
   return (
     <Popover
       placement="bottom-end"
@@ -142,12 +143,69 @@ function UserMenu() {
     >
       <Menu>
         <div className="px-2 py-1.5 text-sm text-fg-muted">{user.email}</div>
-        {/* Placeholder until the workspace switcher (T3). */}
-        <MenuItem icon={<LayoutGrid size="0.875rem" />} onSelect={() => navigate('/workspaces')}>
-          All workspaces
-        </MenuItem>
         <MenuItem icon={<LogOut size="0.875rem" />} onSelect={() => void signOutUser()}>
           Sign out
+        </MenuItem>
+      </Menu>
+    </Popover>
+  );
+}
+
+/**
+ * Top of the sidebar: the current workspace; its menu switches to the user's other
+ * workspaces and leads to the landing page (pending invites, create, all workspaces).
+ * The last-used workspace is remembered by WorkspaceRoute (`/` reopens it).
+ */
+function WorkspaceSwitcher() {
+  const ws = useWorkspace();
+  const user = useUser();
+  const navigate = useNavigate();
+  const { data: memberships } = useMyMemberships(user.uid);
+  const { data: invites } = useMyInvites(user.email ?? '');
+  const toLanding = (state?: LandingState) => navigate('/workspaces', { state });
+
+  return (
+    <Popover
+      className="w-64"
+      trigger={(props) => (
+        <button
+          {...props}
+          type="button"
+          aria-label={`Workspace: ${ws.name}. Switch workspace`}
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left hover:bg-hover aria-expanded:bg-hover"
+        >
+          <WorkspaceIcon id={ws.id} name={ws.name} size={18} />
+          <span className="min-w-0 flex-1 truncate text-md font-semibold tracking-tight">{ws.name}</span>
+          {invites.length > 0 && (
+            <span aria-label={`${invites.length} pending invites`} className="size-1.5 shrink-0 rounded-full bg-accent" />
+          )}
+          <ChevronsUpDown size="0.8125rem" className="shrink-0 text-fg-faint" />
+        </button>
+      )}
+    >
+      <Menu>
+        <MenuLabel>Workspaces</MenuLabel>
+        {memberships.map((m) => (
+          <MenuItem
+            key={m.workspaceId}
+            selected={m.workspaceId === ws.id}
+            icon={<WorkspaceIcon id={m.workspaceId} name={m.workspaceName} size={16} />}
+            onSelect={() => m.workspaceId !== ws.id && navigate(wsPath(m.workspaceSlug))}
+          >
+            {m.workspaceName}
+          </MenuItem>
+        ))}
+        <MenuSeparator />
+        {invites.length > 0 && (
+          <MenuItem icon={<Mail size="0.875rem" />} onSelect={() => toLanding()}>
+            {invites.length === 1 ? '1 pending invite' : `${invites.length} pending invites`}
+          </MenuItem>
+        )}
+        <MenuItem icon={<Plus size="0.875rem" />} onSelect={() => toLanding({ create: true })}>
+          Create workspace
+        </MenuItem>
+        <MenuItem icon={<LayoutGrid size="0.875rem" />} onSelect={() => toLanding()}>
+          All workspaces
         </MenuItem>
       </Menu>
     </Popover>

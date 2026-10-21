@@ -13,6 +13,7 @@ import { useDelayedFlag } from '../board/hooks';
 import { EditableText } from '../board/panel/EditableText';
 import { ColorSwatches } from '../board/pickers';
 import { PageTitle, RowList } from './ui';
+import { confirmAction } from '../../components/ConfirmDialog';
 
 export function LabelsSettings() {
   const { data: labels, loading } = useLabels();
@@ -94,7 +95,14 @@ function LabelRow({ label, labels }: { label: Label; labels: readonly Label[] })
       <IconButton
         label={`Delete ${label.name}`}
         className="hover:text-danger"
-        onClick={() => confirm(`Delete label “${label.name}”? It is removed from every card.`) && run(() => deleteLabel(label))}
+        onClick={() =>
+          void confirmAction({
+            title: `Delete label “${label.name}”?`,
+            body: 'It is removed from every card.',
+            confirmLabel: 'Delete',
+            danger: true,
+          }).then((ok) => ok && run(() => deleteLabel(label)))
+        }
       >
         <Trash size="0.8125rem" />
       </IconButton>
