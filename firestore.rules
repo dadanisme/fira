@@ -1,59 +1,76 @@
 rules_version = '2';
 
+// Multi-tenant layout (SPEC.md "Access rules"): everything lives under workspaces/{wid}.
+// Access is "a member doc keyed by my uid exists"; roles are enforced only by the API,
+// because clients can never write workspaces, members or invites.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Owner email is hardcoded: rules cannot read env vars. Keep in sync with
-    // OWNER_EMAIL / VITE_OWNER_EMAIL (and storage.rules).
-    function ownerEmail() {
-      return 'huntercitation@gmail.com';
+    function signedIn() {
+      return request.auth != null;
     }
 
-    function verified() {
-      return request.auth != null
-        && request.auth.token.email is string
-        && request.auth.token.email_verified == true;
-    }
-
-    // Lowercased email of the caller; also their `members/{id}` document id.
+    // Lowercased email of the caller; also their `invites/{id}` document id.
     function myEmail() {
       return request.auth.token.email.lower();
     }
 
-    function isOwner() {
-      return verified() && myEmail() == ownerEmail();
+    function verified() {
+      return signedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
     }
 
-    // The owner, or a Google account the owner invited (a `members` doc exists).
-    function isMember() {
-      return isOwner()
-        || (verified() && exists(/databases/$(database)/documents/members/$(myEmail())));
+    // One exists() per request; repeated paths are deduplicated, so batches stay well
+    // under the 20-call limit.
+    function isMember(wid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(wid)/members/$(request.auth.uid));
     }
 
-    // Invite list. Only the owner adds/removes members (never their own doc); members
-    // may only refresh their own profile fields on sign-in.
-    match /members/{memberId} {
-      allow read: if isMember();
-      allow create: if isOwner()
-        && request.resource.data.email == memberId
-        && request.resource.data.role == (memberId == ownerEmail() ? 'owner' : 'member');
-      allow update: if (isOwner()
-          && request.resource.data.email == memberId
-          && request.resource.data.role == (memberId == ownerEmail() ? 'owner' : 'member'))
-        || (isMember()
-          && memberId == myEmail()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'name', 'photoURL', 'lastSignInAt']));
-      allow delete: if isOwner() && memberId != ownerEmail();
+    function isContent(coll) {
+      return coll in ['projects', 'labels', 'cards', 'pages'];
     }
 
-    // API tokens are created and revoked only by the server (Admin SDK bypasses rules).
-    // Legacy tokens (no userEmail) belong to the owner.
-    match /tokens/{tokenId} {
-      allow read: if isOwner() || (isMember() && resource.data.get('userEmail', '') == myEmail());
+    // The content subcollections of SPEC.md (cards: comments, activity, attachments;
+    // pages: versions, presence, threads, attachments). A fixed list, not `**`: otherwise a
+    // member could create e.g. cards/x/members/y or pages/x/invites/z, which the
+    // collection-group queries below would surface to other users as fake memberships/invites.
+    function isContentSub(sub) {
+      return sub in ['comments', 'activity', 'attachments', 'versions', 'presence', 'threads'];
     }
 
-    // Everything else (any depth). Rules OR together, so `tokens` and `members` are excluded here.
-    match /{collectionId}/{document=**} {
-      allow read, write: if isMember() && collectionId != 'tokens' && collectionId != 'members';
+    match /workspaces/{wid} {
+      // Server-only writes (Admin SDK) for the workspace, its members and invites.
+      allow read: if isMember(wid);
+
+      match /members/{uid} {
+        allow read: if isMember(wid);
+      }
+
+      match /invites/{email} {
+        allow read: if isMember(wid);
+      }
+
+      match /{coll}/{id} {
+        allow read, write: if isContent(coll) && isMember(wid);
+      }
+
+      match /{coll}/{id}/{sub}/{subId} {
+        allow read, write: if isContent(coll) && isContentSub(sub) && isMember(wid);
+      }
     }
+
+    // Collection-group queries: "my workspaces" and "my invites". Queries must filter on
+    // uid / email, or they are denied.
+    match /{path=**}/members/{uid} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /{path=**}/invites/{email} {
+      allow read: if verified() && resource.data.email == myEmail();
+    }
+
+    // slugs/*, tokens/*: no rules, so no client access. No client writes to workspaces,
+    // members or invites anywhere.
   }
 }

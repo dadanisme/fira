@@ -20,7 +20,7 @@ export interface Actor {
   /** Firebase uid for users, token document id for tokens. */
   id: string;
   name: string;
-  /** Tokens only: the member who created the token (uid + display name). Absent for legacy tokens. */
+  /** Tokens only: the member who created the token (uid + display name). Always set for tokens; optional in the type. */
   via?: { id: string; name: string };
 }
 
@@ -165,7 +165,7 @@ export interface Attachment {
   name: string;
   size: number;
   contentType: string;
-  /** `attachments/{cardId}/{attachmentId}/{name}`. */
+  /** `workspaces/{workspaceId}/cards/{cardId}/{attachmentId}/{name}` (see `cardAttachmentPath`). */
   storagePath: string;
   uploadedBy: Actor;
   createdAt: Timestamp;
@@ -224,7 +224,7 @@ export interface Thread {
 }
 
 /**
- * A file stored with a page (`pages/{pageId}/attachments/{id}`): API uploads and images
+ * A file stored with a page (`workspaces/{wid}/pages/{pageId}/attachments/{id}`): API uploads and images
  * pasted in the editor. `url` is a non-expiring Firebase download-token URL, usable as
  * `![alt](url)` in the page Markdown. Re-uploading a name creates a new attachment.
  */
@@ -233,7 +233,7 @@ export interface PageAttachment {
   name: string;
   size: number;
   contentType: string;
-  /** `pages/{pageId}/{attachmentId}/{name}`. */
+  /** `workspaces/{workspaceId}/pages/{pageId}/{attachmentId}/{name}` (see `pageAttachmentPath`). */
   storagePath: string;
   url: string;
   uploadedBy: Actor;
@@ -242,9 +242,14 @@ export interface PageAttachment {
 
 // ---------------------------------------------------------------- tokens
 
-/** API token as exposed to clients (the `hash` never leaves the server). */
+/**
+ * API token as exposed to clients (the `hash` never leaves the server). `tokens/{id}` is
+ * top level (looked up by hash); `workspaceId` scopes it to one workspace, and it works only
+ * while `workspaces/{workspaceId}/members/{userId}` exists.
+ */
 export interface ApiToken {
   id: string;
+  workspaceId: string;
   name: string;
   color: LabelColor;
   /** First 8 chars of the secret, for display. */
@@ -252,33 +257,71 @@ export interface ApiToken {
   createdAt: Timestamp;
   lastUsedAt?: Timestamp;
   revoked: boolean;
-  /** Creator (lowercased email, uid, display name). Absent on legacy tokens, which count as the owner's. */
-  userEmail?: string;
-  userId?: string;
-  userName?: string;
+  /** Creator uid. */
+  userId: string;
+  /** Creator email, lowercased. */
+  userEmail: string;
+  /** Creator display name. */
+  userName: string;
 }
 
-// ---------------------------------------------------------------- members
+// ---------------------------------------------------------------- workspaces
 
-export const MEMBER_ROLES = ['owner', 'member'] as const;
-export type MemberRole = (typeof MEMBER_ROLES)[number];
+export const WORKSPACE_ROLES = ['owner', 'admin', 'member'] as const;
+export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
+/** Roles an invite (or a role change) can grant: ownership moves only by transfer. */
+export type InviteRole = Exclude<WorkspaceRole, 'owner'>;
+export const INVITE_ROLES: readonly InviteRole[] = ['admin', 'member'];
 
-/**
- * `members/{id}`: who may use fira. `id` is the lowercased email. The owner (OWNER_EMAIL)
- * is always allowed and upserts their own doc with role `owner`; everyone else must be
- * invited by the owner. Profile fields are filled by the member on sign-in.
- */
+/** `workspaces/{id}`. Written only by the API. `id` is random and immutable; name and slug are renameable. */
+export interface Workspace {
+  id: string;
+  /** 1–60 chars. */
+  name: string;
+  /** Unique; see `WORKSPACE_SLUG_RE` / `isWorkspaceSlug` (shared/workspaces.ts). */
+  slug: string;
+  ownerUid: string;
+  createdAt: Timestamp;
+  /** uid */
+  createdBy: string;
+}
+
+/** `workspaces/{wid}/members/{uid}`; `id` = uid. Written only by the API. */
 export interface Member {
+  id: string;
+  uid: string;
+  /** Lowercased. */
+  email: string;
+  name: string;
+  photoURL?: string;
+  role: WorkspaceRole;
+  joinedAt: Timestamp;
+  /** uid of the inviter; absent for the creator / migrated owner. */
+  invitedBy?: string;
+  lastSignInAt?: Timestamp;
+  /** Denormalized from the workspace (rewritten on rename). */
+  workspaceName: string;
+  workspaceSlug: string;
+}
+
+/** A member doc found by the "my workspaces" collection-group query: adds the parent workspace id (from the path). */
+export type Membership = Member & { workspaceId: string };
+
+/** `pending` while the invite email is being sent. */
+export type InviteEmailStatus = 'pending' | 'sent' | 'failed';
+
+/** `workspaces/{wid}/invites/{email}`; `id` = lowercased email. Written only by the API. */
+export interface Invite {
   id: string;
   /** Lowercased; equals `id`. */
   email: string;
-  role: MemberRole;
-  addedAt: Timestamp;
-  /** Email of whoever added the member. */
-  addedBy: string;
-  uid?: string;
-  name?: string;
-  photoURL?: string;
-  /** Absent until the member first signs in ("pending"). */
-  lastSignInAt?: Timestamp;
+  role: InviteRole;
+  invitedBy: { uid: string; name: string; email: string };
+  createdAt: Timestamp;
+  lastSentAt?: Timestamp;
+  emailStatus: InviteEmailStatus;
+  emailError?: string;
+  workspaceId: string;
+  /** Denormalized: the invitee can read the invite but not the workspace. */
+  workspaceName: string;
 }

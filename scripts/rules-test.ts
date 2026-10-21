@@ -4,15 +4,18 @@
  *   npm run test:rules
  *
  * which runs `firebase emulators:exec --only firestore,storage,auth --project demo-fira`
- * around this script. Seeds data with the Admin SDK (bypasses rules), then signs in as
- * emulator users with the client SDK (rules apply) to check the owner / member / stranger
- * access model. The owner email is the one hardcoded in firestore.rules and storage.rules.
+ * around this script. Seeds two workspaces with the Admin SDK (bypasses rules), then signs in
+ * as emulator users with the client SDK (rules apply) to check the workspace access model:
+ * content is open to members (a `workspaces/{wid}/members/{uid}` doc exists), workspaces,
+ * members and invites are server-only writes, slugs and tokens have no client access, and the
+ * "my workspaces" / "my invites" collection-group queries only return the caller's own docs.
  */
 import assert from 'node:assert/strict';
 import { deleteApp, initializeApp as initClient, type FirebaseApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import {
   collection,
+  collectionGroup,
   connectFirestoreEmulator,
   deleteDoc,
   doc,
@@ -26,10 +29,11 @@ import {
   where,
   type Firestore,
 } from 'firebase/firestore';
-import { connectStorageEmulator, getBytes, getStorage, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
+import { connectStorageEmulator, deleteObject, getBytes, getStorage, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import { initializeApp as initAdmin } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getStorage as getAdminStorage } from 'firebase-admin/storage';
 
 for (const v of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST']) {
   if (!process.env[v]) {
@@ -40,7 +44,6 @@ for (const v of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST', 'F
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'demo-fira';
 const BUCKET = `${PROJECT_ID}.appspot.com`;
-const OWNER = 'huntercitation@gmail.com';
 const PASSWORD = 'rules-password';
 
 // Denied writes are expected; keep the SDK from logging each one.
@@ -49,6 +52,7 @@ setLogLevel('silent');
 const admin = initAdmin({ projectId: PROJECT_ID, storageBucket: BUCKET });
 const adminDb = getAdminFirestore(admin);
 const adminAuth = getAdminAuth(admin);
+const adminBucket = getAdminStorage(admin).bucket();
 
 // ---------------------------------------------------------------- harness
 
@@ -59,8 +63,8 @@ interface Client {
 }
 
 const clients: FirebaseApp[] = [];
-async function signIn(email: string, opts: { verified?: boolean } = {}): Promise<Client> {
-  await adminAuth.createUser({ email, password: PASSWORD, emailVerified: opts.verified ?? true, displayName: email.split('@')[0] });
+async function signIn(uid: string, email: string, opts: { verified?: boolean } = {}): Promise<Client> {
+  await adminAuth.createUser({ uid, email, password: PASSWORD, emailVerified: opts.verified ?? true, displayName: uid });
   const app = initClient({ apiKey: 'fake', projectId: PROJECT_ID, storageBucket: BUCKET }, email);
   clients.push(app);
   const auth = getAuth(app);
@@ -108,114 +112,223 @@ async function test(name: string, fn: () => Promise<void>) {
 
 // ---------------------------------------------------------------- seed (Admin SDK, bypasses rules)
 
-const member = (email: string, role = 'member') => ({ email, role, addedAt: new Date(), addedBy: OWNER });
-await adminDb.doc(`members/${OWNER}`).set(member(OWNER, 'owner'));
-await adminDb.doc('members/bob@example.com').set(member('bob@example.com'));
-await adminDb.doc('members/carol@example.com').set(member('carol@example.com'));
-await adminDb.doc('members/dave@example.com').set(member('dave@example.com'));
-await adminDb.doc('cards/c1').set({ title: 'Card', labels: [] });
-await adminDb.doc('pages/p1').set({ title: 'Page', content: '', version: 1 });
-const token = (name: string, userEmail?: string) => ({ name, hash: 'x', prefix: 'fira_xxx', revoked: false, createdAt: new Date(), ...(userEmail && { userEmail }) });
-await adminDb.doc('tokens/t-owner').set(token('owner bot', OWNER));
-await adminDb.doc('tokens/t-bob').set(token('bob bot', 'bob@example.com'));
-await adminDb.doc('tokens/t-legacy').set(token('legacy'));
+// Workspace A: owner o, admin a, member m, a pending invite for x@. Workspace B: member m2.
+// Stranger s belongs to nothing; u is unverified and has an invite to A.
+const A = 'wsA';
+const B = 'wsB';
+const workspace = (slug: string, ownerUid: string) => ({ name: slug.toUpperCase(), slug, ownerUid, createdBy: ownerUid, createdAt: new Date() });
+const member = (wid: string, uid: string, role: 'owner' | 'admin' | 'member') => ({
+  uid,
+  email: `${uid}@example.com`,
+  name: uid,
+  role,
+  joinedAt: new Date(),
+  workspaceName: wid.toUpperCase(),
+  workspaceSlug: wid.toLowerCase(),
+});
+const invite = (wid: string, email: string) => ({
+  email,
+  role: 'member',
+  invitedBy: { uid: 'o', name: 'o', email: 'o@example.com' },
+  createdAt: new Date(),
+  emailStatus: 'sent',
+  workspaceId: wid,
+  workspaceName: wid.toUpperCase(),
+});
+await adminDb.doc(`workspaces/${A}`).set(workspace('wsa', 'o'));
+await adminDb.doc(`workspaces/${B}`).set(workspace('wsb', 'm2'));
+await adminDb.doc(`workspaces/${A}/members/o`).set(member(A, 'o', 'owner'));
+await adminDb.doc(`workspaces/${A}/members/a`).set(member(A, 'a', 'admin'));
+await adminDb.doc(`workspaces/${A}/members/m`).set(member(A, 'm', 'member'));
+await adminDb.doc(`workspaces/${B}/members/m2`).set(member(B, 'm2', 'owner'));
+await adminDb.doc(`workspaces/${A}/invites/x@example.com`).set(invite(A, 'x@example.com'));
+await adminDb.doc(`workspaces/${A}/invites/u@example.com`).set(invite(A, 'u@example.com'));
+await adminDb.doc(`workspaces/${B}/invites/y@example.com`).set(invite(B, 'y@example.com'));
+await adminDb.doc('slugs/wsa').set({ workspaceId: A });
+for (const w of [A, B]) {
+  await adminDb.doc(`workspaces/${w}/cards/c1`).set({ title: 'Card', labels: [] });
+  await adminDb.doc(`workspaces/${w}/pages/p1`).set({ title: 'Page', content: '', version: 1 });
+  await adminDb.doc(`workspaces/${w}/projects/pr1`).set({ key: 'NI', name: 'Project' });
+}
+await adminDb.doc('tokens/t-m').set({ workspaceId: A, userId: 'm', name: 'bot', hash: 'x', prefix: 'fira_xxx', revoked: false, createdAt: new Date() });
 const bytes = new TextEncoder().encode('hello');
+await adminBucket.file(`workspaces/${B}/cards/c1/a1/b.txt`).save(Buffer.from(bytes));
+await adminBucket.file('attachments/c1/a1/old.txt').save(Buffer.from(bytes));
+await adminBucket.file('pages/p1/f1/old.png').save(Buffer.from(bytes));
 
-const owner = await signIn(OWNER);
-const bob = await signIn('Bob@Example.com'); // mixed case: rules compare lowercased emails
-const stranger = await signIn('eve@example.com');
-const unverified = await signIn('dave@example.com', { verified: false });
+const o = await signIn('o', 'o@example.com');
+const a = await signIn('a', 'a@example.com');
+const m = await signIn('m', 'M@Example.com'); // mixed case: rules never compare member emails
+const s = await signIn('s', 's@example.com');
+const x = await signIn('x', 'X@example.com'); // invite lookups compare the lowercased email
+const u = await signIn('u', 'u@example.com', { verified: false });
 
-// ---------------------------------------------------------------- firestore
+const W = (wid: string, path = '') => `workspaces/${wid}${path && `/${path}`}`;
 
-await test('non-member is denied everything', async () => {
-  const { db } = stranger;
-  await denied('read card', () => getDocFromServer(doc(db, 'cards/c1')));
-  await denied('write card', () => setDoc(doc(db, 'cards/x'), { title: 'x' }));
-  await denied('read page', () => getDocFromServer(doc(db, 'pages/p1')));
-  await denied('list members', () => getDocsFromServer(collection(db, 'members')));
-  await denied('read own (missing) member doc', () => getDocFromServer(doc(db, 'members/eve@example.com')));
-  await denied('create own member doc', () => setDoc(doc(db, 'members/eve@example.com'), member('eve@example.com')));
-  await denied('read a token', () => getDocFromServer(doc(db, 'tokens/t-bob')));
+// ---------------------------------------------------------------- content
+
+await test('member reads and writes content and every subcollection in their workspace', async () => {
+  const { db } = m;
+  await allowed('read workspace doc', () => getDocFromServer(doc(db, W(A))));
+  await allowed('list members', () => getDocsFromServer(collection(db, W(A, 'members'))));
+  await allowed('list invites', () => getDocsFromServer(collection(db, W(A, 'invites'))));
+  await allowed('read card', () => getDocFromServer(doc(db, W(A, 'cards/c1'))));
+  await allowed('list cards', () => getDocsFromServer(collection(db, W(A, 'cards'))));
+  await allowed('create card', () => setDoc(doc(db, W(A, 'cards/c2')), { title: 'New', labels: [] }));
+  await allowed('update card', () => updateDoc(doc(db, W(A, 'cards/c1')), { title: 'Edited' }));
+  await allowed('delete card', () => deleteDoc(doc(db, W(A, 'cards/c2'))));
+  await allowed('project', () => setDoc(doc(db, W(A, 'projects/pr2')), { key: 'XY', name: 'P2' }));
+  await allowed('label', () => setDoc(doc(db, W(A, 'labels/l1')), { name: 'L', color: 'red' }));
+  await allowed('update page', () => updateDoc(doc(db, W(A, 'pages/p1')), { content: 'x', version: 2 }));
+  for (const sub of ['comments', 'activity', 'attachments']) {
+    await allowed(`card ${sub} write`, () => setDoc(doc(db, W(A, `cards/c1/${sub}/s1`)), { a: 1 }));
+    await allowed(`card ${sub} read`, () => getDocsFromServer(collection(db, W(A, `cards/c1/${sub}`))));
+  }
+  for (const sub of ['versions', 'presence', 'threads', 'attachments']) {
+    await allowed(`page ${sub} write`, () => setDoc(doc(db, W(A, `pages/p1/${sub}/s1`)), { a: 1 }));
+    await allowed(`page ${sub} read`, () => getDocsFromServer(collection(db, W(A, `pages/p1/${sub}`))));
+    await allowed(`page ${sub} delete`, () => deleteDoc(doc(db, W(A, `pages/p1/${sub}/s1`))));
+  }
 });
 
-await test('unverified email with a member doc is denied', async () => {
-  await denied('read card', () => getDocFromServer(doc(unverified.db, 'cards/c1')));
-  await denied('read members', () => getDocsFromServer(collection(unverified.db, 'members')));
+await test("member is denied another workspace's content", async () => {
+  const { db } = m;
+  await denied('read workspace B', () => getDocFromServer(doc(db, W(B))));
+  await denied('read B card', () => getDocFromServer(doc(db, W(B, 'cards/c1'))));
+  await denied('list B cards', () => getDocsFromServer(collection(db, W(B, 'cards'))));
+  await denied('write B card', () => setDoc(doc(db, W(B, 'cards/c9')), { title: 'x' }));
+  await denied('B comment', () => setDoc(doc(db, W(B, 'cards/c1/comments/x')), { body: 'x' }));
+  await denied('list B members', () => getDocsFromServer(collection(db, W(B, 'members'))));
+  await denied('list B invites', () => getDocsFromServer(collection(db, W(B, 'invites'))));
 });
 
-await test('member can read/write cards, pages and subcollections', async () => {
-  const { db } = bob;
-  await allowed('read card', () => getDocFromServer(doc(db, 'cards/c1')));
-  await allowed('create card', () => setDoc(doc(db, 'cards/c2'), { title: 'Bob card', labels: [] }));
-  await allowed('update card', () => updateDoc(doc(db, 'cards/c1'), { title: 'Edited' }));
-  await allowed('comment', () => setDoc(doc(db, 'cards/c1/comments/m1'), { body: 'hi' }));
-  await allowed('update page', () => updateDoc(doc(db, 'pages/p1'), { content: 'x', version: 2 }));
-  await allowed('page version', () => setDoc(doc(db, 'pages/p1/versions/v2'), { version: 2 }));
-  await allowed('labels/projects', () => setDoc(doc(db, 'labels/l1'), { name: 'L', color: 'red' }));
-  await allowed('list members', () => getDocsFromServer(collection(db, 'members')));
+await test('a stranger can access nothing in a workspace', async () => {
+  const { db } = s;
+  await denied('workspace doc', () => getDocFromServer(doc(db, W(A))));
+  await denied('members', () => getDocsFromServer(collection(db, W(A, 'members'))));
+  await denied('a member doc', () => getDocFromServer(doc(db, W(A, 'members/m'))));
+  await denied('invites', () => getDocsFromServer(collection(db, W(A, 'invites'))));
+  await denied('read card', () => getDocFromServer(doc(db, W(A, 'cards/c1'))));
+  await denied('write card', () => setDoc(doc(db, W(A, 'cards/c9')), { title: 'x' }));
+  await denied('read page', () => getDocFromServer(doc(db, W(A, 'pages/p1'))));
+  await denied('page version', () => setDoc(doc(db, W(A, 'pages/p1/versions/v9')), { version: 9 }));
+  await denied('projects', () => getDocsFromServer(collection(db, W(A, 'projects'))));
+  await denied('join by writing own member doc', () => setDoc(doc(db, W(A, 'members/s')), member(A, 's', 'member')));
 });
 
-await test('member cannot manage members', async () => {
-  const { db } = bob;
-  await denied('create member', () => setDoc(doc(db, 'members/zed@example.com'), member('zed@example.com')));
-  await denied('delete other member', () => deleteDoc(doc(db, 'members/carol@example.com')));
-  await denied('delete own member doc', () => deleteDoc(doc(db, 'members/bob@example.com')));
-  await denied("edit other's profile", () => updateDoc(doc(db, 'members/carol@example.com'), { name: 'Hacked' }));
-  await denied('promote self', () => updateDoc(doc(db, 'members/bob@example.com'), { role: 'owner' }));
-  await denied('edit own addedBy', () => updateDoc(doc(db, 'members/bob@example.com'), { addedBy: 'bob@example.com' }));
-  await denied('write via catch-all path', () => setDoc(doc(db, 'members/bob@example.com/x/y'), { a: 1 }));
+// ---------------------------------------------------------------- server-only docs
+
+await test('no client writes workspaces, members or invites (not even the owner)', async () => {
+  for (const [who, uid, { db }] of [['owner', 'o', o], ['admin', 'a', a], ['member', 'm', m]] as const) {
+    await denied(`${who} creates a workspace`, () => setDoc(doc(db, 'workspaces/wsNew'), workspace('new', uid)));
+    await denied(`${who} updates the workspace`, () => updateDoc(doc(db, W(A)), { name: 'Hacked' }));
+    await denied(`${who} deletes the workspace`, () => deleteDoc(doc(db, W(A))));
+    await denied(`${who} adds a member`, () => setDoc(doc(db, W(A, 'members/s')), member(A, 's', 'member')));
+    await denied(`${who} changes a role`, () => updateDoc(doc(db, W(A, 'members/m')), { role: 'owner' }));
+    await denied(`${who} edits own profile`, () => updateDoc(doc(db, W(A, `members/${uid}`)), { name: 'X' }));
+    await denied(`${who} removes a member`, () => deleteDoc(doc(db, W(A, 'members/m'))));
+    await denied(`${who} creates an invite`, () => setDoc(doc(db, W(A, 'invites/z@example.com')), invite(A, 'z@example.com')));
+    await denied(`${who} updates an invite`, () => updateDoc(doc(db, W(A, 'invites/x@example.com')), { role: 'admin' }));
+    await denied(`${who} deletes an invite`, () => deleteDoc(doc(db, W(A, 'invites/x@example.com'))));
+  }
+  await denied('invitee deletes (declines) their invite directly', () => deleteDoc(doc(x.db, W(A, 'invites/x@example.com'))));
+  await denied('invitee accepts by writing a member doc', () => setDoc(doc(x.db, W(A, 'members/x')), member(A, 'x', 'member')));
 });
 
-await test('member can update only their own profile fields', async () => {
-  await allowed('own profile', () =>
-    updateDoc(doc(bob.db, 'members/bob@example.com'), { uid: 'u-bob', name: 'Bob', photoURL: 'https://x/y.png', lastSignInAt: new Date() }),
-  );
+await test('slugs and tokens have no client access', async () => {
+  for (const [who, { db }] of [['owner', o], ['member', m], ['stranger', s]] as const) {
+    await denied(`${who} reads a slug`, () => getDocFromServer(doc(db, 'slugs/wsa')));
+    await denied(`${who} lists slugs`, () => getDocsFromServer(collection(db, 'slugs')));
+    await denied(`${who} reserves a slug`, () => setDoc(doc(db, 'slugs/mine'), { workspaceId: A }));
+    await denied(`${who} reads a token`, () => getDocFromServer(doc(db, 'tokens/t-m')));
+    await denied(`${who} queries own tokens`, () => getDocsFromServer(query(collection(db, 'tokens'), where('userId', '==', 'm'))));
+    await denied(`${who} writes a token`, () => setDoc(doc(db, 'tokens/t-new'), { workspaceId: A, userId: 'm' }));
+    await denied(`${who} revokes a token`, () => updateDoc(doc(db, 'tokens/t-m'), { revoked: true }));
+  }
 });
 
-await test('member reads only their own tokens; nobody writes tokens', async () => {
-  const { db } = bob;
-  await allowed('own token', () => getDocFromServer(doc(db, 'tokens/t-bob')));
-  await allowed('query own tokens', () => getDocsFromServer(query(collection(db, 'tokens'), where('userEmail', '==', 'bob@example.com'))));
-  await denied("owner's token", () => getDocFromServer(doc(db, 'tokens/t-owner')));
-  await denied('legacy (owner) token', () => getDocFromServer(doc(db, 'tokens/t-legacy')));
-  await denied('list all tokens', () => getDocsFromServer(collection(db, 'tokens')));
-  await denied('member writes a token', () => setDoc(doc(db, 'tokens/t-new'), token('x', 'bob@example.com')));
-  await denied('member revokes own token directly', () => updateDoc(doc(db, 'tokens/t-bob'), { revoked: true }));
-  await allowed('owner lists all tokens', () => getDocsFromServer(collection(owner.db, 'tokens')));
-  await denied('owner writes a token', () => setDoc(doc(owner.db, 'tokens/t-new'), token('x', OWNER)));
+await test('only the whitelisted collections and subcollections are writable', async () => {
+  const { db } = m;
+  await denied('workspaces/A/other/x write', () => setDoc(doc(db, W(A, 'other/x')), { a: 1 }));
+  await denied('workspaces/A/other/x read', () => getDocFromServer(doc(db, W(A, 'other/x'))));
+  await denied('unknown card subcollection', () => setDoc(doc(db, W(A, 'cards/c1/other/x')), { a: 1 }));
+  // Fake member/invite docs nested in content would leak into the collection-group queries.
+  await denied('nested fake member doc', () => setDoc(doc(db, W(A, 'cards/c1/members/s')), member(A, 's', 'owner')));
+  await denied('nested fake invite doc', () => setDoc(doc(db, W(A, 'pages/p1/invites/s@example.com')), invite(A, 's@example.com')));
+  await denied('deeper nesting', () => setDoc(doc(db, W(A, 'cards/c1/comments/s1/members/s')), member(A, 's', 'owner')));
+  await denied('old top-level cards', () => getDocFromServer(doc(db, 'cards/c1')));
+  await denied('old top-level members', () => getDocsFromServer(collection(db, 'members')));
 });
 
-await test('owner manages members (but cannot remove themselves or mint owners)', async () => {
-  const { db } = owner;
-  await allowed('read card', () => getDocFromServer(doc(db, 'cards/c1')));
-  await allowed('add member', () => setDoc(doc(db, 'members/zed@example.com'), member('zed@example.com')));
-  await denied('add an owner', () => setDoc(doc(db, 'members/yan@example.com'), member('yan@example.com', 'owner')));
-  await denied('id/email mismatch', () => setDoc(doc(db, 'members/a@example.com'), member('b@example.com')));
-  await allowed('edit member', () => updateDoc(doc(db, 'members/zed@example.com'), { name: 'Zed' }));
-  await allowed('remove member', () => deleteDoc(doc(db, 'members/zed@example.com')));
-  await denied('remove own doc', () => deleteDoc(doc(db, `members/${OWNER}`)));
-  await allowed('update own profile', () => updateDoc(doc(db, `members/${OWNER}`), { name: 'Owner', lastSignInAt: new Date() }));
+// ---------------------------------------------------------------- collection-group queries
+
+await test('"my workspaces": members collection group filtered on my uid', async () => {
+  const mine = await getDocsFromServer(query(collectionGroup(m.db, 'members'), where('uid', '==', 'm')));
+  assert.deepEqual(mine.docs.map((d) => d.ref.path), [W(A, 'members/m')]);
+  const strangers = await getDocsFromServer(query(collectionGroup(s.db, 'members'), where('uid', '==', 's')));
+  assert.equal(strangers.size, 0);
+  await denied("another user's uid", () => getDocsFromServer(query(collectionGroup(m.db, 'members'), where('uid', '==', 'm2'))));
+  await denied('unfiltered', () => getDocsFromServer(collectionGroup(m.db, 'members')));
+  await denied('filtered on email instead', () => getDocsFromServer(query(collectionGroup(m.db, 'members'), where('email', '==', 'm@example.com'))));
+  await allowed('own member doc by path', () => getDocFromServer(doc(m.db, W(A, 'members/m'))));
+});
+
+await test('"my invites": invites collection group filtered on my verified email', async () => {
+  const mine = await getDocsFromServer(query(collectionGroup(x.db, 'invites'), where('email', '==', 'x@example.com')));
+  assert.deepEqual(mine.docs.map((d) => d.ref.path), [W(A, 'invites/x@example.com')]);
+  await allowed('own invite by path', () => getDocFromServer(doc(x.db, W(A, 'invites/x@example.com'))));
+  await denied('another email', () => getDocsFromServer(query(collectionGroup(x.db, 'invites'), where('email', '==', 'y@example.com'))));
+  await denied('unfiltered', () => getDocsFromServer(collectionGroup(x.db, 'invites')));
+  await denied('unverified account', () => getDocsFromServer(query(collectionGroup(u.db, 'invites'), where('email', '==', 'u@example.com'))));
+  await denied('invitee cannot read the workspace doc', () => getDocFromServer(doc(x.db, W(A))));
 });
 
 // ---------------------------------------------------------------- storage (cross-service rules)
 
-await test('storage: members read/write attachments and page files; non-members cannot', async () => {
-  await allowed('member upload', () => uploadBytes(ref(bob.storage, 'attachments/c1/a1/hello.txt'), bytes));
-  await allowed('member read', () => getBytes(ref(bob.storage, 'attachments/c1/a1/hello.txt')));
-  await allowed('owner upload page file', () => uploadBytes(ref(owner.storage, 'pages/p1/f1/img.png'), bytes));
-  await allowed('member read page file', () => getBytes(ref(bob.storage, 'pages/p1/f1/img.png')));
-  await denied('stranger upload', () => uploadBytes(ref(stranger.storage, 'attachments/c1/a2/x.txt'), bytes));
-  await denied('stranger read', () => getBytes(ref(stranger.storage, 'attachments/c1/a1/hello.txt')));
-  await denied('unverified read', () => getBytes(ref(unverified.storage, 'pages/p1/f1/img.png')));
+const TEN_MB = 10 * 1024 * 1024;
+
+await test('storage: members upload, read and delete card and page files in their workspace', async () => {
+  const { storage } = m;
+  for (const path of [W(A, 'cards/c1/a1/hello.txt'), W(A, 'pages/p1/f1/img.png')]) {
+    await allowed(`upload ${path}`, () => uploadBytes(ref(storage, path), bytes));
+    await allowed(`read ${path}`, () => getBytes(ref(storage, path)));
+    await allowed(`read by another member`, () => getBytes(ref(a.storage, path)));
+  }
+  await allowed('delete', () => deleteObject(ref(storage, W(A, 'pages/p1/f1/img.png'))));
 });
 
+await test('storage: 10 MB per file', async () => {
+  await allowed('exactly 10 MB', () => uploadBytes(ref(m.storage, W(A, 'cards/c1/big/10mb.bin')), new Uint8Array(TEN_MB)));
+  await denied('10 MB + 1 byte', () => uploadBytes(ref(m.storage, W(A, 'cards/c1/big/over.bin')), new Uint8Array(TEN_MB + 1)));
+  await denied('10 MB + 1 byte overwrite', () => uploadBytes(ref(m.storage, W(A, 'cards/c1/big/10mb.bin')), new Uint8Array(TEN_MB + 1)));
+});
+
+await test('storage: other workspaces, other areas, the old layout and strangers are denied', async () => {
+  await denied('B upload', () => uploadBytes(ref(m.storage, W(B, 'cards/c1/a2/x.txt')), bytes));
+  await denied('B read', () => getBytes(ref(m.storage, W(B, 'cards/c1/a1/b.txt'))));
+  await denied('B delete', () => deleteObject(ref(m.storage, W(B, 'cards/c1/a1/b.txt'))));
+  await denied('other area upload', () => uploadBytes(ref(m.storage, W(A, 'other/x/y.txt')), bytes));
+  await denied('workspace root upload', () => uploadBytes(ref(m.storage, W(A, 'loose.txt')), bytes));
+  await denied('old attachments/ read', () => getBytes(ref(m.storage, 'attachments/c1/a1/old.txt')));
+  await denied('old attachments/ upload', () => uploadBytes(ref(m.storage, 'attachments/c1/a9/new.txt'), bytes));
+  await denied('old pages/ read', () => getBytes(ref(m.storage, 'pages/p1/f1/old.png')));
+  await denied('stranger upload', () => uploadBytes(ref(s.storage, W(A, 'cards/c1/a2/x.txt')), bytes));
+  await denied('stranger read', () => getBytes(ref(s.storage, W(A, 'cards/c1/a1/hello.txt'))));
+  await denied('stranger delete', () => deleteObject(ref(s.storage, W(A, 'cards/c1/a1/hello.txt'))));
+});
+
+// ---------------------------------------------------------------- removal
+
 await test('removing a member cuts access immediately (Firestore + Storage)', async () => {
-  await adminDb.doc('members/bob@example.com').delete();
-  await denied('read card', () => getDocFromServer(doc(bob.db, 'cards/c1')));
-  await denied('write card', () => setDoc(doc(bob.db, 'cards/c3'), { title: 'x' }));
-  await denied('own token', () => getDocFromServer(doc(bob.db, 'tokens/t-bob')));
-  await denied('storage read', () => getBytes(ref(bob.storage, 'attachments/c1/a1/hello.txt')));
+  await adminDb.doc(W(A, 'members/m')).delete();
+  await denied('read workspace', () => getDocFromServer(doc(m.db, W(A))));
+  await denied('read card', () => getDocFromServer(doc(m.db, W(A, 'cards/c1'))));
+  await denied('write card', () => setDoc(doc(m.db, W(A, 'cards/c3')), { title: 'x' }));
+  await denied('storage read', () => getBytes(ref(m.storage, W(A, 'cards/c1/a1/hello.txt'))));
+  await denied('storage upload', () => uploadBytes(ref(m.storage, W(A, 'cards/c1/a3/x.txt')), bytes));
+  const mine = await getDocsFromServer(query(collectionGroup(m.db, 'members'), where('uid', '==', 'm')));
+  assert.equal(mine.size, 0, 'removed member still listed in "my workspaces"');
+  await allowed('the other members keep access', () => getDocFromServer(doc(a.db, W(A, 'cards/c1'))));
 });
 
 // ---------------------------------------------------------------- done

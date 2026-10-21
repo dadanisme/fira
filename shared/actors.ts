@@ -5,7 +5,7 @@ export function actorName(actor: Actor): string {
   return actor.via ? `${actor.name} (via ${actor.via.name})` : actor.name;
 }
 
-/** Normalizes an email for comparisons and as a `members/{id}` document id. */
+/** Normalizes an email for comparisons and as a `workspaces/{wid}/invites/{id}` document id. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

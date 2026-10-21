@@ -2,34 +2,21 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Owner email is hardcoded: keep in sync with firestore.rules and OWNER_EMAIL.
-    function isOwner() {
-      return request.auth != null
-        && request.auth.token.email is string
-        && request.auth.token.email.lower() == 'huntercitation@gmail.com'
-        && request.auth.token.email_verified == true;
-    }
-
-    // The owner, or an invited member (a Firestore `members/{lowercased email}` doc exists).
+    // A workspace member: `workspaces/{wid}/members/{uid}` exists in Firestore.
     // Cross-service rules: Storage needs permission to read Firestore (granted on deploy).
-    function isMember() {
-      return isOwner()
-        || (request.auth != null
-          && request.auth.token.email is string
-          && request.auth.token.email_verified == true
-          && firestore.exists(/databases/(default)/documents/members/$(request.auth.token.email.lower())));
+    function isMember(wid) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/workspaces/$(wid)/members/$(request.auth.uid));
     }
 
-    // Card attachments: attachments/{cardId}/{attachmentId}/{name}
-    match /attachments/{path=**} {
-      allow read, write: if isMember();
-    }
-
-    // Files stored with pages: pages/{pageId}/{attachmentId}/{name} (older editor
-    // uploads: pages/{pageId}/{fileId}-{name}). Pages embed them by download-token URL
-    // (?alt=media&token=...), which Storage serves without evaluating these rules.
-    match /pages/{path=**} {
-      allow read, write: if isMember();
+    // Card attachments: workspaces/{wid}/cards/{cardId}/{attachmentId}/{name}
+    // Page files: workspaces/{wid}/pages/{pageId}/{attachmentId}/{name}. Pages embed them
+    // by download-token URL (?alt=media&token=...), which Storage serves without these rules.
+    // Max 10 MB per file (LIMITS.fileBytes in shared/workspaces.ts).
+    match /workspaces/{wid}/{area}/{rest=**} {
+      allow read, delete: if area in ['cards', 'pages'] && isMember(wid);
+      allow create, update: if area in ['cards', 'pages'] && isMember(wid)
+        && request.resource.size <= 10 * 1024 * 1024;
     }
   }
 }
