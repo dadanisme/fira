@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://fira.muhammadramdan.com", "https://fira-six.vercel.app", "http://localhost:5173"],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type", "Content-Disposition", "Content-Length"],
+    "maxAgeSeconds": 3600
+  }
+]

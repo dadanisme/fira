@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Download, File as FileIcon, Paperclip, Trash } from 'lucide-react';
 import type { Attachment, Card } from '@shared/types';
-import { attachmentUrl, deleteAttachment, uploadAttachment, useAttachments } from '../../../data/attachments';
+import { attachmentUrl, deleteAttachment, downloadAttachment, uploadAttachment, useAttachments } from '../../../data/attachments';
 import { uploadError } from '../../../data/uploads';
 import { IconButton } from '../../../components/IconButton';
 import { cx } from '../../../lib/cx';
@@ -142,18 +142,15 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
           {formatBytes(a.size)} · {a.uploadedBy.name} · {relativeTime(a.createdAt)}
         </span>
       </div>
-      <a
-        href={url ?? undefined}
-        download={a.name}
-        target="_blank"
-        rel="noreferrer"
+      <button
+        type="button"
+        onClick={() => downloadAttachment(cardId, a).catch(toastError)}
         aria-label={`Download ${a.name}`}
         title="Download"
-        aria-disabled={!url}
         className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100"
       >
         <Download size="0.8125rem" />
-      </a>
+      </button>
       <IconButton
         size="sm"
         label={`Delete ${a.name}`}

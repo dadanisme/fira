@@ -43,4 +43,5 @@ Commit straight to `main` and deploy once a change is verified: typecheck, lint,
 - Storage rules read Firestore (`firestore.exists`), which needs the Storage service agent to hold `roles/firebaserules.firestoreServiceAgent` (already granted).
 - The collection-group queries need the single-field index exemptions for `members.uid` and `invites.email` (`firestore.indexes.json`, deployed with `firebase deploy --only firestore:indexes`); without them production rejects the queries.
 - Until the workspace migration is cut over (see the migration in SPEC.md), production data and rules are on the old layout: develop the SPA with `npm run dev:emu`, not `npm run dev`.
+- The Storage bucket's CORS (`storage.cors.json`, applied with `gcloud storage buckets update gs://fira-dadanisme.firebasestorage.app --cors-file=storage.cors.json`) lets the app `getBlob` files for real downloads; add new app origins there.
 - `gh issue view` fails in this repo; use `gh api repos/dadanisme/fira/issues/N`.

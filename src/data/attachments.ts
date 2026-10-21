@@ -1,5 +1,5 @@
 import { orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
+import { deleteObject, getBlob, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useMemo } from 'react';
 import type { Attachment } from '@shared/types';
 import { db, storage } from '../lib/firebase';
@@ -67,4 +67,20 @@ export async function deleteAttachment(cardId: string, attachment: Attachment): 
 export function attachmentUrl(cardId: string, attachment: Attachment): Promise<string> {
   if (!ownPath(cardId, attachment)) return Promise.reject(new Error('This attachment points outside its card'));
   return getDownloadURL(storageRef(storage, attachment.storagePath));
+}
+
+/**
+ * Saves the file under its own name. Storage URLs are cross-origin, where browsers ignore
+ * `<a download>` and open the file instead, so this fetches the bytes (bucket CORS:
+ * storage.cors.json) and downloads them from a same-origin object URL.
+ */
+export async function downloadAttachment(cardId: string, attachment: Attachment): Promise<void> {
+  if (!ownPath(cardId, attachment)) throw new Error('This attachment points outside its card');
+  const blob = await getBlob(storageRef(storage, attachment.storagePath));
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = attachment.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
