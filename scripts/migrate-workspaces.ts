@@ -3,7 +3,7 @@
  * `pages`, `members`; Storage `attachments/**`, `pages/**`) into workspace "Ramdan" (slug
  * `ramdan`). See SPEC.md "Migration" and the cutover runbook.
  *
- *   npm run migrate -- copy    --project fira-dadanisme [--dry-run]
+ *   npm run migrate -- copy    --project fira-dadanisme [--dry-run] [--prune]
  *   npm run migrate -- verify  --project fira-dadanisme [--lock]
  *   npm run migrate -- cleanup --project fira-dadanisme --confirm ramdan
  *
@@ -13,7 +13,10 @@
  * The owner is OWNER_EMAIL (the former single-space owner).
  *
  * - `copy` is idempotent: it converges the workspace to rewrite(old data), writing only docs and
- *   objects that differ and removing extras. It refuses once `verify --lock` has run.
+ *   objects that differ. Extras (in the workspace, not in the old data) are kept unless `--prune`.
+ *   It refuses, writing nothing, once `verify --lock` has run, or when anything it would
+ *   overwrite or delete was written after the last completed copy (`migration.copiedAt`): that
+ *   means the app is live. Run `verify --lock` right after the last copy, before deploying.
  * - `verify` is read-only and exits non-zero on any failure. Before the lock it is strict (every
  *   doc equals its rewritten original); after the lock the app is live and edits are expected,
  *   so it checks structure only and reports drift as info.
@@ -246,7 +249,7 @@ async function inChunks<T>(items: T[], size: number, fn: (item: T) => Promise<vo
   for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(fn));
 }
 
-async function walk(db: Firestore, cols: CollectionReference[], rootPath: string): Promise<Tree> {
+async function walk(db: Firestore, cols: CollectionReference[], rootPath: string, times?: Map<string, Timestamp>): Promise<Tree> {
   const tree: Tree = new Map();
   const rel = (path: string) => (rootPath ? path.slice(rootPath.length + 1) : path);
   const visit = async (col: CollectionReference): Promise<void> => {
@@ -254,7 +257,11 @@ async function walk(db: Firestore, cols: CollectionReference[], rootPath: string
     for (let i = 0; i < refs.length; i += 300) {
       const chunk = refs.slice(i, i + 300);
       const snaps = chunk.length ? await db.getAll(...chunk) : [];
-      for (const s of snaps) if (s.exists) tree.set(rel(s.ref.path), s.data()!);
+      for (const s of snaps) {
+        if (!s.exists) continue;
+        tree.set(rel(s.ref.path), s.data()!);
+        times?.set(rel(s.ref.path), s.updateTime!);
+      }
       await inChunks(chunk, 20, async (ref) => {
         for (const sub of await ref.listCollections()) if (!SKIP_SUBCOLLECTIONS.has(sub.id)) await visit(sub);
       });
@@ -265,8 +272,8 @@ async function walk(db: Firestore, cols: CollectionReference[], rootPath: string
 }
 
 const oldTree = (db: Firestore) => walk(db, CONTENT_COLLECTIONS.map((c) => db.collection(c)), '');
-const newTree = (db: Firestore, wid: string) =>
-  walk(db, CONTENT_COLLECTIONS.map((c) => db.collection(`workspaces/${wid}/${c}`)), `workspaces/${wid}`);
+const newTree = (db: Firestore, wid: string, times?: Map<string, Timestamp>) =>
+  walk(db, CONTENT_COLLECTIONS.map((c) => db.collection(`workspaces/${wid}/${c}`)), `workspaces/${wid}`, times);
 
 /** `cards/abc/comments/x` → `cards/*\/comments`. */
 function collectionKey(relPath: string): string {
@@ -330,34 +337,67 @@ interface WorkspaceState {
   exists: boolean;
   data?: DocumentData;
   locked: boolean;
+  /** End of the last completed copy (server time); unset until the first copy finishes. */
+  copiedAt?: Timestamp;
+  /** When the workspace doc was created (fallback for `copiedAt`). */
+  createTime?: Timestamp;
 }
 
+/**
+ * The migration workspace, found through `slugs/ramdan` and cross-checked against the
+ * `migration.ownerEmail` marker, so a renamed workspace is detected instead of re-created.
+ */
 async function findWorkspace(db: Firestore): Promise<WorkspaceState | null> {
+  const marked = (await db.collection('workspaces').where('migration.ownerEmail', '==', ownerEmail()).get()).docs;
   const slug = await db.doc(`slugs/${WORKSPACE_SLUG}`).get();
-  if (!slug.exists) return null;
-  const wid = slug.get('workspaceId') as string;
+  const wid = slug.exists ? (slug.get('workspaceId') as string) : null;
+  const stray = marked.find((d) => d.id !== wid);
+  if (stray) {
+    throw new Error(
+      `workspaces/${stray.id} was created by this migration but slugs/${WORKSPACE_SLUG} does not point to it (renamed while live?): aborting.`,
+    );
+  }
+  if (!wid) return null;
   const ws = await db.doc(`workspaces/${wid}`).get();
   if (!ws.exists || !ws.get('migration')) {
     throw new Error(`slugs/${WORKSPACE_SLUG} belongs to workspace ${wid}, which was not created by this migration (or was already cleaned up): aborting.`);
   }
-  return { wid, exists: true, data: ws.data(), locked: !!ws.get('migration.lockedAt') };
+  return {
+    wid,
+    exists: true,
+    data: ws.data(),
+    locked: !!ws.get('migration.lockedAt'),
+    copiedAt: ws.get('migration.copiedAt') as Timestamp | undefined,
+    createTime: ws.createTime,
+  };
 }
+
+const LOCKED = 'The migration is locked (verify --lock ran; the app is live): copy would overwrite new edits. Aborting.';
 
 // ---------------------------------------------------------------- copy
 
 export interface CopyOptions {
   target: Target;
   dryRun?: boolean;
+  /** Delete docs, members, invites and objects in the workspace that have no original. Off by default. */
+  prune?: boolean;
   log?: (line: string) => void;
+}
+
+interface Counts {
+  /** Extras: in the workspace, not in the old data (deleted only with `prune`). */
+  extra: number;
+  deleted: number;
 }
 
 export interface CopyResult {
   workspaceId: string;
   createdWorkspace: boolean;
-  docs: Record<string, { source: number; written: number; unchanged: number; deleted: number }>;
+  pruned: boolean;
+  docs: Record<string, { source: number; written: number; unchanged: number } & Counts>;
   rewrites: Record<string, RewriteStats>;
-  members: { written: number; unchanged: number; deleted: number; members: number; invites: number };
-  storage: { source: number; copied: number; unchanged: number; deleted: number };
+  members: { written: number; unchanged: number; members: number; invites: number } & Counts;
+  storage: { source: number; copied: number; unchanged: number } & Counts;
   tokens: { total: number; updated: number; unchanged: number; skipped: number; toOwner: number; revoked: number };
   warnings: string[];
 }
@@ -368,15 +408,29 @@ export function copyChanges(r: CopyResult): number {
   return docs + r.members.written + r.members.deleted + r.storage.copied + r.storage.deleted + r.tokens.updated + (r.createdWorkspace ? 1 : 0);
 }
 
+const after = (t: Timestamp | undefined, since: Timestamp) =>
+  !!t && (t.seconds > since.seconds || (t.seconds === since.seconds && t.nanoseconds > since.nanoseconds));
+/** Storage times are milliseconds: count the copy's own millisecond as "after" too (safe side). */
+const fileAfter = (f: StorageFile, since: Timestamp) => {
+  const at = Date.parse(String(f.metadata.updated ?? f.metadata.timeCreated ?? ''));
+  return Number.isFinite(at) && at >= Math.floor(since.toMillis());
+};
+
+/**
+ * Converges the workspace to rewrite(old data). Reads and plans everything first, then refuses
+ * (writing nothing) if the workspace is locked, or if anything it would overwrite or delete was
+ * written after the last completed copy (the app is live). Only then writes, and records
+ * `migration.copiedAt` when done.
+ */
 export async function copy(opts: CopyOptions): Promise<CopyResult> {
-  const { target: t, dryRun = false } = opts;
+  const { target: t, dryRun = false, prune = false } = opts;
   const log = opts.log ?? console.log;
   const { db, bucket } = t;
   const warnings: string[] = [];
 
   // 1. workspace guard (before anything else: never touch a real or locked workspace)
   let ws = await findWorkspace(db);
-  if (ws?.locked) throw new Error('The migration is locked (verify --lock ran; the app is live): copy would overwrite new edits. Aborting.');
+  if (ws?.locked) throw new Error(LOCKED);
 
   // 2. owner, then the workspace itself
   const members = await oldMembers(db);
@@ -391,7 +445,7 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
       ownerUid: owner.uid,
       createdBy: owner.uid,
       createdAt,
-      migration: { copiedAt: Timestamp.now(), ownerEmail: owner.email },
+      migration: { ownerEmail: owner.email },
     };
     if (!dryRun) {
       await db.runTransaction(async (tx) => {
@@ -405,18 +459,26 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
     createdWorkspace = true;
   } else {
     if (ws.data!.ownerUid !== owner.uid) throw new Error(`Workspace ${ws.wid} is owned by ${ws.data!.ownerUid}, not ${owner.email} (${owner.uid}): aborting.`);
-    if (!dryRun) await db.doc(`workspaces/${ws.wid}`).update({ 'migration.copiedAt': Timestamp.now() });
+    if (ws.data!.name !== WORKSPACE_NAME || ws.data!.slug !== WORKSPACE_SLUG) {
+      throw new Error(`Workspace ${ws.wid} was renamed to ${ws.data!.name} (/${ws.data!.slug}): the app is live. Aborting.`);
+    }
   }
   const wid = ws.wid;
   const wsCreatedAt = ws.data!.createdAt as Timestamp;
-  const writer = dryRun ? null : db.bulkWriter();
-  writer?.onWriteError((err) => {
-    if (err.failedAttempts < 5) return true;
-    throw err;
-  });
+  /** Writes after this are not the migration's: the end of the last copy (or the workspace's creation). */
+  const since = createdWorkspace ? null : (ws.copiedAt ?? ws.createTime ?? null);
+  /** Things the copy would overwrite or delete that changed after the last copy. */
+  const live: string[] = [];
+  const isLive = (label: string, newer: boolean) => newer && live.push(label);
+
+  // The plan: nothing is written until every read and the live check are done.
+  const sets: { ref: DocumentReference; data: DocumentData; merge?: boolean }[] = [];
+  const deletes: DocumentReference[] = [];
+  const fileCopies: { src: StorageFile; dest: string }[] = [];
+  const fileDeletes: string[] = [];
 
   // 3. members and invites
-  const memberResult = { written: 0, unchanged: 0, deleted: 0, members: 0, invites: 0 };
+  const memberResult = { written: 0, unchanged: 0, extra: 0, deleted: 0, members: 0, invites: 0 };
   {
     const expected = new Map<string, DocumentData>();
     const seenUids = new Set<string>();
@@ -459,29 +521,34 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
       }
     }
     for (const key of expected.keys()) memberResult[key.startsWith('members/') ? 'members' : 'invites']++;
-    const existing = new Map<string, DocumentData>();
+    const existing = new Map<string, { data: DocumentData; updated: Timestamp }>();
     if (ws.exists) {
       for (const col of ['members', 'invites']) {
-        for (const d of (await db.collection(`workspaces/${wid}/${col}`).get()).docs) existing.set(`${col}/${d.id}`, d.data());
+        for (const d of (await db.collection(`workspaces/${wid}/${col}`).get()).docs) existing.set(`${col}/${d.id}`, { data: d.data(), updated: d.updateTime });
       }
     }
     for (const [key, data] of expected) {
       const compact = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
-      if (existing.has(key) && deepEqual(existing.get(key), compact)) memberResult.unchanged++;
+      const have = existing.get(key);
+      if (have && deepEqual(have.data, compact)) memberResult.unchanged++;
       else {
+        if (have && since) isLive(`${key} (edited)`, after(have.updated, since));
         memberResult.written++;
-        void writer?.set(db.doc(`workspaces/${wid}/${key}`), compact);
+        sets.push({ ref: db.doc(`workspaces/${wid}/${key}`), data: compact });
       }
     }
-    for (const key of existing.keys()) {
+    for (const [key, have] of existing) {
       if (expected.has(key)) continue;
+      memberResult.extra++;
+      if (since) isLive(`${key} (new)`, after(have.updated, since));
+      if (!prune) continue;
       memberResult.deleted++;
-      void writer?.delete(db.doc(`workspaces/${wid}/${key}`));
+      deletes.push(db.doc(`workspaces/${wid}/${key}`));
     }
   }
 
   // 4. storage
-  const storageResult = { source: 0, copied: 0, unchanged: 0, deleted: 0 };
+  const storageResult = { source: 0, copied: 0, unchanged: 0, extra: 0, deleted: 0 };
   {
     const sources: StorageFile[] = [];
     for (const area of STORAGE_AREAS) sources.push(...(await bucket.getFiles({ prefix: area.from }))[0]);
@@ -493,30 +560,35 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
     }
     storageResult.source = sources.length;
     const wanted = new Set<string>();
-    await inChunks(sources, 8, async (src) => {
+    for (const src of sources) {
       const destName = mapStoragePath(src.name, wid)!;
       wanted.add(destName);
       const dest = dests.get(destName);
-      if (dest && sameObject(src, dest)) {
-        storageResult.unchanged++;
-        return;
+      if (dest && sameObject(src, dest)) storageResult.unchanged++;
+      else {
+        if (dest && since) isLive(`storage ${destName} (replaced)`, fileAfter(dest, since));
+        storageResult.copied++;
+        fileCopies.push({ src, dest: destName });
       }
-      storageResult.copied++;
-      if (!dryRun) await copyObject(src, bucket.file(destName));
-    });
-    await inChunks([...dests.keys()].filter((n) => !wanted.has(n)), 8, async (name) => {
+    }
+    for (const [name, f] of dests) {
+      if (wanted.has(name)) continue;
+      storageResult.extra++;
+      if (since) isLive(`storage ${name} (new)`, fileAfter(f, since));
+      if (!prune) continue;
       storageResult.deleted++;
-      if (!dryRun) await bucket.file(name).delete({ ignoreNotFound: true });
-    });
+      fileDeletes.push(name);
+    }
   }
 
   // 5. content documents
   const docs: CopyResult['docs'] = {};
   const rewrites: CopyResult['rewrites'] = {};
   {
-    const [olds, news] = await Promise.all([oldTree(db), ws.exists ? newTree(db, wid) : Promise.resolve<Tree>(new Map())]);
-    const bump = (key: string, field: 'source' | 'written' | 'unchanged' | 'deleted') => {
-      docs[key] ??= { source: 0, written: 0, unchanged: 0, deleted: 0 };
+    const times = new Map<string, Timestamp>();
+    const [olds, news] = await Promise.all([oldTree(db), ws.exists ? newTree(db, wid, times) : Promise.resolve<Tree>(new Map())]);
+    const bump = (key: string, field: 'source' | 'written' | 'unchanged' | 'extra' | 'deleted') => {
+      docs[key] ??= { source: 0, written: 0, unchanged: 0, extra: 0, deleted: 0 };
       docs[key][field]++;
     };
     for (const [rel, data] of olds) {
@@ -526,14 +598,18 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
       const next = rewriteData(data, wid, bucket.name, rewrites[key]);
       if (news.has(rel) && deepEqual(news.get(rel), next)) bump(key, 'unchanged');
       else {
+        if (news.has(rel) && since) isLive(`${rel} (edited)`, after(times.get(rel), since));
         bump(key, 'written');
-        void writer?.set(db.doc(`workspaces/${wid}/${rel}`), next);
+        sets.push({ ref: db.doc(`workspaces/${wid}/${rel}`), data: next });
       }
     }
     for (const rel of news.keys()) {
       if (olds.has(rel)) continue;
+      bump(collectionKey(rel), 'extra');
+      if (since) isLive(`${rel} (new)`, after(times.get(rel), since));
+      if (!prune) continue;
       bump(collectionKey(rel), 'deleted');
-      void writer?.delete(db.doc(`workspaces/${wid}/${rel}`));
+      deletes.push(db.doc(`workspaces/${wid}/${rel}`));
     }
     for (const [k, s] of Object.entries(rewrites)) if (!s.urls && !s.paths && !s.links) delete rewrites[k];
   }
@@ -576,15 +652,62 @@ export async function copy(opts: CopyOptions): Promise<CopyResult> {
       }
       if (Object.entries(patch).every(([k, v]) => deepEqual(data[k], v))) tokenResult.unchanged++;
       else {
+        // A token of this workspace created or changed after the last copy belongs to the live app.
+        if (since && data.workspaceId === wid) isLive(`tokens/${d.id} (${data.name})`, after(d.updateTime, since));
         tokenResult.updated++;
-        void writer?.set(d.ref, patch, { merge: true });
+        sets.push({ ref: d.ref, data: patch, merge: true });
       }
     }
   }
 
-  await writer?.close();
+  const result: CopyResult = {
+    workspaceId: wid,
+    createdWorkspace,
+    pruned: prune,
+    docs,
+    rewrites,
+    members: memberResult,
+    storage: storageResult,
+    tokens: tokenResult,
+    warnings,
+  };
 
-  const result: CopyResult = { workspaceId: wid, createdWorkspace, docs, rewrites, members: memberResult, storage: storageResult, tokens: tokenResult, warnings };
+  // 7. refuse before the first write if the app is live, or if the workspace got locked meanwhile
+  if (live.length) {
+    throw new Error(
+      `workspaces/${wid} has ${live.length} change(s) since the last copy (${since!.toDate().toISOString()}): the app looks live, and copy would overwrite or delete them. Aborting; nothing written.\n` +
+        live.slice(0, 20).map((l) => `  ${l}`).join('\n') +
+        (live.length > 20 ? `\n  … and ${live.length - 20} more` : ''),
+    );
+  }
+  if (!createdWorkspace) {
+    const now = await db.doc(`workspaces/${wid}`).get();
+    if (now.get('migration.lockedAt')) throw new Error(LOCKED);
+    if (!deepEqual(now.get('migration.copiedAt'), ws.copiedAt)) throw new Error('Another copy finished while this one was planning: re-run.');
+  }
+
+  // 8. write, then record the end of the copy
+  if (!dryRun) {
+    const writer = db.bulkWriter();
+    writer.onWriteError((err) => err.failedAttempts < 5);
+    const failed: string[] = [];
+    const track = (p: Promise<unknown>, path: string) => p.catch((e: Error) => failed.push(`${path}: ${e.message}`));
+    for (const s of sets) void track(s.merge ? writer.set(s.ref, s.data, { merge: true }) : writer.set(s.ref, s.data), s.ref.path);
+    for (const ref of deletes) void track(writer.delete(ref), ref.path);
+    await inChunks(fileCopies, 8, ({ src, dest }) => copyObject(src, bucket.file(dest)));
+    await inChunks(fileDeletes, 8, async (name) => {
+      await bucket.file(name).delete({ ignoreNotFound: true });
+    });
+    await writer.close();
+    if (failed.length) throw new Error(`${failed.length} write(s) failed; copiedAt not recorded, re-run:\n  ${failed.slice(0, 20).join('\n  ')}`);
+    await db.runTransaction(async (tx) => {
+      const ref = db.doc(`workspaces/${wid}`);
+      const snap = await tx.get(ref);
+      if (snap.get('migration.lockedAt')) throw new Error('The workspace was locked while copy ran: its writes landed after the lock. Run verify and check the data.');
+      tx.update(ref, { 'migration.copiedAt': FieldValue.serverTimestamp() });
+    });
+  }
+
   printCopy(result, dryRun, log);
   return result;
 }
@@ -618,19 +741,22 @@ async function copyObject(src: StorageFile, dest: StorageFile): Promise<void> {
 function printCopy(r: CopyResult, dryRun: boolean, log: (line: string) => void) {
   const verb = dryRun ? 'would write' : 'written';
   log(`${dryRun ? '[dry run] ' : ''}copy → workspaces/${r.workspaceId} (${WORKSPACE_NAME}, /${WORKSPACE_SLUG})${r.createdWorkspace ? `, workspace ${dryRun ? 'would be ' : ''}created` : ''}`);
-  log('  documents (source / ' + verb + ' / unchanged / deleted extras):');
-  for (const [k, c] of Object.entries(r.docs).sort()) log(`    ${k.padEnd(28)} ${c.source} / ${c.written} / ${c.unchanged} / ${c.deleted}`);
+  const extras = (c: Counts) => (r.pruned ? `${dryRun ? 'would delete' : 'deleted'} ${c.deleted} extras` : `${c.extra} extras kept`);
+  log(`  documents (source / ${verb} / unchanged / extras${r.pruned ? ' deleted' : ' kept'}):`);
+  for (const [k, c] of Object.entries(r.docs).sort()) log(`    ${k.padEnd(28)} ${c.source} / ${c.written} / ${c.unchanged} / ${r.pruned ? c.deleted : c.extra}`);
   if (Object.keys(r.rewrites).length) {
     log('  rewritten strings (urls / storagePaths / links):');
     for (const [k, s] of Object.entries(r.rewrites).sort()) log(`    ${k.padEnd(28)} ${s.urls} / ${s.paths} / ${s.links}`);
   }
   const m = r.members;
-  log(`  members: ${m.members} members + ${m.invites} invites (${verb} ${m.written}, unchanged ${m.unchanged}, deleted ${m.deleted})`);
+  log(`  members: ${m.members} members + ${m.invites} invites (${verb} ${m.written}, unchanged ${m.unchanged}, ${extras(m)})`);
   const s = r.storage;
-  log(`  storage: ${s.source} objects (${dryRun ? 'would copy' : 'copied'} ${s.copied}, unchanged ${s.unchanged}, deleted extras ${s.deleted})`);
+  log(`  storage: ${s.source} objects (${dryRun ? 'would copy' : 'copied'} ${s.copied}, unchanged ${s.unchanged}, ${extras(s)})`);
   const t = r.tokens;
   log(`  tokens: ${t.total} (${dryRun ? 'would update' : 'updated'} ${t.updated}, unchanged ${t.unchanged}, other workspace ${t.skipped}, legacy → owner ${t.toOwner}, dead → revoked ${t.revoked})`);
   for (const w of r.warnings) log(`  warning: ${w}`);
+  const kept = Object.values(r.docs).reduce((n, c) => n + c.extra, 0) + r.members.extra + r.storage.extra;
+  if (!r.pruned && kept) log(`  ${kept} extras kept (not in the old data): verify fails until they are gone; re-run with --prune to delete them.`);
   log(`  total changes: ${copyChanges(r)}`);
 }
 
@@ -682,6 +808,7 @@ export async function verify(opts: VerifyOptions): Promise<VerifyResult> {
   }
   const { wid, locked } = ws;
   const wsData = ws.data!;
+  if (!locked && !ws.copiedAt) fail('no completed copy recorded (migration.copiedAt): run copy.');
   if (wsData.slug !== WORKSPACE_SLUG || wsData.name !== WORKSPACE_NAME) fail(`workspaces/${wid} has name/slug ${wsData.name}/${wsData.slug}.`);
 
   // members, invites, owner
@@ -809,7 +936,12 @@ export async function verify(opts: VerifyOptions): Promise<VerifyResult> {
     if (!result.ok) log('not locking: verify failed.');
     else if (locked) log('already locked.');
     else {
-      await db.doc(`workspaces/${wid}`).update({ 'migration.lockedAt': Timestamp.now() });
+      await db.runTransaction(async (tx) => {
+        const ref = db.doc(`workspaces/${wid}`);
+        const snap = await tx.get(ref);
+        if (!deepEqual(snap.get('migration.copiedAt'), ws.copiedAt)) throw new Error('A copy finished while verify ran: not locking; run verify --lock again.');
+        tx.update(ref, { 'migration.lockedAt': FieldValue.serverTimestamp() });
+      });
       result.locked = true;
       log(`locked workspaces/${wid}: copy now refuses to run. Deploy the app next.`);
     }
@@ -877,8 +1009,9 @@ export async function cleanup(opts: CleanupOptions): Promise<CleanupResult> {
 
 // ---------------------------------------------------------------- CLI
 
-const USAGE = `usage: migrate-workspaces.ts <copy|verify|cleanup> [--project <id>] [--dry-run] [--lock] [--confirm ${WORKSPACE_SLUG}]
-  copy               copy old data into workspace "${WORKSPACE_NAME}" (idempotent; --dry-run writes nothing)
+const USAGE = `usage: migrate-workspaces.ts <copy|verify|cleanup> [--project <id>] [--dry-run] [--prune] [--lock] [--confirm ${WORKSPACE_SLUG}]
+  copy               copy old data into workspace "${WORKSPACE_NAME}" (idempotent; --dry-run writes nothing;
+                     --prune also deletes workspace data with no original); refuses if locked or live
   verify             check the copy (read-only); --lock marks it final (copy then refuses)
   cleanup            delete the old data (needs --confirm ${WORKSPACE_SLUG} and the slug again on stdin)
   --project <id>     required unless the emulator env vars are set; must match FIREBASE_SERVICE_ACCOUNT
@@ -886,7 +1019,7 @@ env: OWNER_EMAIL (former owner), FIREBASE_SERVICE_ACCOUNT, VITE_FIREBASE_STORAGE
 
 export async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
-  const flags: { project?: string; dryRun?: boolean; lock?: boolean; confirm?: string } = {};
+  const flags: { project?: string; dryRun?: boolean; prune?: boolean; lock?: boolean; confirm?: string } = {};
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     const value = () => {
@@ -895,6 +1028,7 @@ export async function main(argv: string[]): Promise<number> {
       return v;
     };
     if (a === '--dry-run') flags.dryRun = true;
+    else if (a === '--prune') flags.prune = true;
     else if (a === '--lock') flags.lock = true;
     else if (a === '--project') flags.project = value();
     else if (a.startsWith('--project=')) flags.project = a.slice('--project='.length);
@@ -907,11 +1041,12 @@ export async function main(argv: string[]): Promise<number> {
     return 2;
   }
   if (flags.dryRun && cmd !== 'copy') throw new Error('--dry-run applies to copy only (verify is read-only).');
+  if (flags.prune && cmd !== 'copy') throw new Error('--prune applies to copy only.');
   if (flags.lock && cmd !== 'verify') throw new Error('--lock applies to verify only.');
   const target = connect(flags.project);
   console.log(`target: ${target.emulator ? `emulators (project ${target.projectId})` : `PROJECT ${target.projectId}`}, bucket ${target.bucket.name}`);
   try {
-    if (cmd === 'copy') await copy({ target, dryRun: flags.dryRun });
+    if (cmd === 'copy') await copy({ target, dryRun: flags.dryRun, prune: flags.prune });
     else if (cmd === 'verify') return (await verify({ target, lock: flags.lock })).ok ? 0 : 1;
     else await cleanup({ target, confirm: flags.confirm });
     return 0;

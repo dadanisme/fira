@@ -5,9 +5,11 @@
  *
  * which runs `firebase emulators:exec --only firestore,storage,auth --project demo-fira` around
  * this script. Seeds the old single-space layout, then: copy → verify passes → copy again makes
- * no changes → dry run writes nothing → rewritten URLs answer 200 → verify --lock → copy refuses
- * → post-lock edits still verify → cleanup refuses without confirmation → cleanup deletes the
- * old data and keeps the new. Refuses to run without the emulator env vars.
+ * no changes → source changes converge, extras are kept unless --prune → copy refuses (writing
+ * nothing) when the workspace changed after the last copy or was renamed → rewritten URLs answer
+ * 200 → verify --lock → copy refuses (also with --prune / --dry-run) → post-lock edits still
+ * verify → cleanup refuses without confirmation → cleanup deletes the old data and keeps the new.
+ * Refuses to run without the emulator env vars.
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -161,6 +163,9 @@ await test('CLI refuses without --project off the emulators, with partial emulat
   const wrong = cli(['verify', '--project', 'fira-dadanisme']);
   assert.notEqual(wrong.code, 0);
   assert.match(wrong.out, /does not match the emulator project/);
+  const prune = cli(['verify', '--prune']);
+  assert.notEqual(prune.code, 0);
+  assert.match(prune.out, /--prune applies to copy only/);
 });
 
 await test('copy refuses a slug owned by a non-migrated workspace', async () => {
@@ -188,6 +193,7 @@ await test('copy creates the workspace, members, invites, content, files and tok
   assert.equal(ws.ownerUid, 'u-owner');
   assert.ok(ws.createdAt.isEqual(at('2026-01-01T00:00:00Z')));
   assert.equal((await db.doc('slugs/ramdan').get()).get('workspaceId'), wid);
+  assert.ok(ws.migration.copiedAt instanceof Timestamp, 'copiedAt is recorded when the copy finishes');
 
   const owner = (await W('members/u-owner').get()).data()!;
   assert.equal(owner.role, 'owner');
@@ -262,19 +268,120 @@ await test('copy again makes no changes (idempotent)', async () => {
   assert.equal(again.storage.unchanged, 3);
 });
 
-await test('a changed or deleted source converges on the next copy; dry run reports it without writing', async () => {
-  await db.doc('labels/l1').update({ color: 'blue' });
-  await W('labels/stray').set({ name: 'stray', color: 'gray' });
-  assert.equal((await verify({ target: t, skipUrls: true, log: quiet })).ok, false);
-  const dry = await copy({ target: t, dryRun: true, log: quiet });
-  assert.equal(dry.docs.labels.written, 1);
-  assert.equal(dry.docs.labels.deleted, 1);
-  assert.equal((await W('labels/l1').get()).get('color'), 'red');
-  const real = await copy({ target: t, log: quiet });
-  assert.equal(copyChanges(real), 2);
-  assert.equal((await W('labels/l1').get()).get('color'), 'blue');
-  assert.equal((await W('labels/stray').get()).exists, false);
+await test('a changed source converges; a deleted source leaves extras that only --prune deletes', async () => {
+  // Extra old data, copied, then deleted from the old layout (a straggler cleaned up at the source).
+  const TMP = 'pages/pg9/tmp.png';
+  await db.doc('labels/l2').set({ name: 'temp', color: 'gray' });
+  await db.doc('members/carol@example.com').set({ email: 'carol@example.com', role: 'member', addedAt: at('2026-04-01T00:00:00Z'), addedBy: OWNER });
+  await bucket.file(TMP).save(Buffer.from('tmp'), { contentType: 'image/png', resumable: false });
+  assert.equal(copyChanges(await copy({ target: t, log: quiet })), 3);
   assert.ok((await verify({ target: t, skipUrls: true, log: quiet })).ok);
+  await db.doc('labels/l2').delete();
+  await db.doc('members/carol@example.com').delete();
+  await bucket.file(TMP).delete();
+  await db.doc('labels/l1').update({ color: 'blue' });
+
+  // Without --prune: the change converges, the extras stay, so verify (and the lock) fail.
+  const kept = await copy({ target: t, log: quiet });
+  assert.equal(copyChanges(kept), 1);
+  assert.deepEqual([kept.docs.labels.written, kept.docs.labels.extra, kept.docs.labels.deleted], [1, 1, 0]);
+  assert.deepEqual([kept.members.extra, kept.members.deleted, kept.storage.extra, kept.storage.deleted], [1, 0, 1, 0]);
+  assert.equal((await W('labels/l1').get()).get('color'), 'blue');
+  assert.equal((await W('labels/l2').get()).exists, true);
+  assert.equal((await W('invites/carol@example.com').get()).exists, true);
+  assert.equal((await bucket.file(`workspaces/${wid}/pages/pg9/tmp.png`).exists())[0], true);
+  const failing = await verify({ target: t, lock: true, skipUrls: true, log: quiet });
+  assert.equal(failing.ok, false);
+  assert.equal(failing.locked, false);
+  assert.equal((await db.doc(`workspaces/${wid}`).get()).get('migration.lockedAt'), undefined, 'a failing verify must not lock');
+
+  // --prune --dry-run reports the deletions without making them; --prune makes them.
+  const dry = await copy({ target: t, prune: true, dryRun: true, log: quiet });
+  assert.deepEqual([dry.docs.labels.deleted, dry.members.deleted, dry.storage.deleted], [1, 1, 1]);
+  assert.equal((await W('labels/l2').get()).exists, true);
+  const pruned = cli(['copy', '--prune']);
+  assert.equal(pruned.code, 0, pruned.out);
+  assert.match(pruned.out, /deleted 1 extras/);
+  assert.equal((await W('labels/l2').get()).exists, false);
+  assert.equal((await W('invites/carol@example.com').get()).exists, false);
+  assert.equal((await bucket.file(`workspaces/${wid}/pages/pg9/tmp.png`).exists())[0], false);
+  assert.ok((await verify({ target: t, skipUrls: true, log: quiet })).ok);
+  assert.equal(copyChanges(await copy({ target: t, prune: true, log: quiet })), 0);
+});
+
+await test('copy refuses, writing nothing, when the workspace changed after the last copy (with or without --prune)', async () => {
+  const live = /change\(s\) since the last copy/;
+  const refuses = async (what: string) => {
+    for (const o of [{}, { prune: true }, { dryRun: true }, { prune: true, dryRun: true }]) {
+      await assert.rejects(copy({ target: t, ...o, log: quiet }), live, `${what} ${JSON.stringify(o)}`);
+    }
+  };
+  const copiedAt = async () => (await db.doc(`workspaces/${wid}`).get()).get('migration.copiedAt') as Timestamp;
+  let before = await copiedAt();
+
+  // An edited doc (the app wrote it after the copy) is not overwritten.
+  await W('cards/c1').update({ title: 'Live edit' });
+  await refuses('edited card');
+  const r = cli(['copy', '--prune']);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, live);
+  assert.match(r.out, /cards\/c1 \(edited\)/);
+  assert.equal((await W('cards/c1').get()).get('title'), 'Live edit');
+  assert.ok(before.isEqual(await copiedAt()), 'a refused copy does not record copiedAt');
+  // Rewritten to exactly what copy would write (e.g. by an interrupted copy): harmless, allowed.
+  await W('cards/c1').update({ title: 'First' });
+  assert.equal(copyChanges(await copy({ target: t, log: quiet })), 0);
+  before = await copiedAt();
+
+  // A new doc, member, signed-in member, file or token in the workspace: refused, nothing deleted.
+  await W('labels/live').set({ name: 'live', color: 'green' });
+  await refuses('new label');
+  assert.equal((await W('labels/live').get()).exists, true);
+  await W('labels/live').delete();
+
+  await W('members/u-new').set({ uid: 'u-new', email: 'new@example.com', role: 'member', joinedAt: Timestamp.now() });
+  await refuses('new member');
+  assert.equal((await W('members/u-new').get()).exists, true);
+  await W('members/u-new').delete();
+
+  const alice = (await W('members/u-alice').get()).data()!;
+  await W('members/u-alice').update({ lastSignInAt: Timestamp.now() });
+  await refuses('member signed in');
+  await W('members/u-alice').set(alice);
+
+  const LIVE_FILE = `workspaces/${wid}/cards/c1/live/upload.txt`;
+  await bucket.file(LIVE_FILE).save(Buffer.from('new'), { contentType: 'text/plain', resumable: false });
+  await refuses('new file');
+  assert.equal((await bucket.file(LIVE_FILE).exists())[0], true);
+  await bucket.file(LIVE_FILE).delete();
+
+  await db.doc('tokens/t-live').set({ name: 'live bot', hash: 'h9', prefix: 'fira_zzz', revoked: false, workspaceId: wid, userId: 'u-new', userEmail: 'new@example.com', userName: 'New', createdAt: Timestamp.now() });
+  await refuses('new token');
+  assert.equal((await db.doc('tokens/t-live').get()).get('revoked'), false);
+  await db.doc('tokens/t-live').delete();
+
+  // Refusals wrote nothing: copiedAt is unchanged, and the next copy is a no-op.
+  assert.ok(before.isEqual(await copiedAt()));
+  assert.equal(copyChanges(await copy({ target: t, prune: true, log: quiet })), 0);
+  assert.ok((await verify({ target: t, skipUrls: true, log: quiet })).ok);
+});
+
+await test('a renamed workspace is refused, not re-created', async () => {
+  const ref = db.doc(`workspaces/${wid}`);
+  await ref.update({ name: 'Renamed' });
+  await assert.rejects(copy({ target: t, log: quiet }), /renamed/);
+  await ref.update({ name: 'Ramdan' });
+
+  await db.doc('slugs/ramdan').delete();
+  await db.doc('slugs/ramdan2').set({ workspaceId: wid });
+  await ref.update({ slug: 'ramdan2' });
+  await assert.rejects(copy({ target: t, dryRun: true, log: quiet }), /does not point to it/);
+  await assert.rejects(copy({ target: t, log: quiet }), /does not point to it/);
+  assert.equal((await db.collection('workspaces').get()).size, 1);
+  await db.doc('slugs/ramdan2').delete();
+  await db.doc('slugs/ramdan').set({ workspaceId: wid });
+  await ref.update({ slug: 'ramdan' });
+  assert.equal(copyChanges(await copy({ target: t, log: quiet })), 0);
 });
 
 await test('rewritten download URLs answer 200 from the Storage emulator', async () => {
@@ -289,14 +396,22 @@ await test('rewritten download URLs answer 200 from the Storage emulator', async
   assert.equal(await res2.text(), 'png-bytes-2');
 });
 
-await test('verify --lock locks; copy then refuses', async () => {
-  const v = await verify({ target: t, lock: true, skipUrls: true, log: quiet });
-  assert.ok(v.ok && v.locked);
-  assert.ok((await db.doc(`workspaces/${wid}`).get()).get('migration.lockedAt'));
-  await assert.rejects(copy({ target: t, log: quiet }), /locked/);
-  const r = cli(['copy']);
-  assert.notEqual(r.code, 0);
-  assert.match(r.out, /locked/);
+await test('verify --lock right after copy + verify locks; copy then refuses, even with --prune or --dry-run', async () => {
+  assert.equal(copyChanges(await copy({ target: t, log: quiet })), 0);
+  const r0 = cli(['verify', '--lock']);
+  assert.equal(r0.code, 0, r0.out);
+  assert.match(r0.out, /locked workspaces\//);
+  const ws = (await db.doc(`workspaces/${wid}`).get()).data()!;
+  assert.ok(ws.migration.lockedAt instanceof Timestamp);
+  const again = await verify({ target: t, lock: true, skipUrls: true, log: quiet });
+  assert.ok(again.ok && again.locked);
+  for (const o of [{}, { prune: true }, { dryRun: true }]) await assert.rejects(copy({ target: t, ...o, log: quiet }), /locked/);
+  for (const args of [['copy'], ['copy', '--prune'], ['copy', '--dry-run', '--prune']]) {
+    const r = cli(args);
+    assert.notEqual(r.code, 0);
+    assert.match(r.out, /locked/);
+  }
+  assert.ok(ws.migration.lockedAt.isEqual((await db.doc(`workspaces/${wid}`).get()).get('migration.lockedAt')));
 });
 
 await test('after the lock, live edits still verify (structural checks only)', async () => {
