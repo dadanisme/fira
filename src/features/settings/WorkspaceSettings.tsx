@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRightLeft, Trash } from 'lucide-react';
+import { ArrowRightLeft, ChevronDown, Trash } from 'lucide-react';
 import { LIMITS } from '@shared/workspaces';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { confirmAction } from '../../components/ConfirmDialog';
 import { Input } from '../../components/Input';
-import { Select } from '../../components/Select';
+import { Menu, MenuItem } from '../../components/Menu';
+import { Popover } from '../../components/Popover';
 import { WorkspaceIcon } from '../../components/WorkspaceIcon';
 import { ApiError } from '../../data/api';
 import { useMembers } from '../../data/members';
@@ -52,7 +54,7 @@ function ReadOnlyGeneral() {
       <RowList>
         <li>
           <SettingRow label="Name">
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
               <WorkspaceIcon id={ws.id} name={ws.name} size={18} />
               <span className="truncate">{ws.name}</span>
             </span>
@@ -194,16 +196,36 @@ function TransferSection() {
         </p>
       ) : (
         <div className="flex gap-2">
-          <Select aria-label="New owner" value={target} onChange={(e) => setTarget(e.target.value)} className="w-64">
-            <option value="" disabled>
-              Choose a member…
-            </option>
-            {others.map((m) => (
-              <option key={m.uid} value={m.uid}>
-                {m.name ? `${m.name} (${m.email})` : m.email}
-              </option>
-            ))}
-          </Select>
+          <Popover
+            className="w-80"
+            trigger={(props) => (
+              <Button {...props} aria-label="New owner" className="w-64 font-normal">
+                {picked ? (
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <Avatar actor={{ type: 'user', id: picked.uid, name: picked.name || picked.email }} photoURL={picked.photoURL} size={16} />
+                    <span className="truncate">{picked.name || picked.email}</span>
+                  </span>
+                ) : (
+                  <span className="flex-1 text-left text-fg-faint">Choose a member…</span>
+                )}
+                <ChevronDown size="0.75rem" className="shrink-0 text-fg-faint" />
+              </Button>
+            )}
+          >
+            <Menu>
+              {others.map((m) => (
+                <MenuItem
+                  key={m.uid}
+                  selected={m.uid === target}
+                  onSelect={() => setTarget(m.uid)}
+                  icon={<Avatar actor={{ type: 'user', id: m.uid, name: m.name || m.email }} photoURL={m.photoURL} size={16} />}
+                >
+                  {m.name || m.email}
+                  {m.name && <span className="ml-1.5 text-fg-faint">{m.email}</span>}
+                </MenuItem>
+              ))}
+            </Menu>
+          </Popover>
           <Button icon={<ArrowRightLeft size="0.8125rem" />} disabled={!picked} onClick={transfer}>
             Transfer…
           </Button>
