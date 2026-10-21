@@ -3,16 +3,22 @@ import { Check } from 'lucide-react';
 import { cx } from '../lib/cx';
 import { usePopoverClose } from './Popover';
 
-/** Vertical menu with arrow-key navigation; focuses its first item on mount. Put inside a Popover. */
+const ITEMS = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled)';
+
+/**
+ * Vertical menu with arrow-key navigation; on mount focuses its checked radio item
+ * (if any), else its first item. Put inside a Popover.
+ */
 export function Menu({ children, className }: { children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    ref.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    const menu = ref.current;
+    (menu?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not(:disabled)') ?? menu?.querySelector<HTMLElement>(ITEMS))?.focus();
   }, []);
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const items = [...(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
+    const items = [...(ref.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
     const i = items.indexOf(document.activeElement as HTMLElement);
     const targets: Partial<Record<string, number>> = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 };
     const next = targets[e.key];
@@ -40,14 +46,17 @@ export interface MenuItemProps {
   keepOpen?: boolean;
   /** Tooltip; also shown while disabled (e.g. why the action is unavailable). */
   title?: string;
+  /** `radio`: a single-choice option (menuitemradio, aria-checked from `selected`). */
+  kind?: 'item' | 'radio';
 }
 
-export function MenuItem({ onSelect, children, icon, selected, danger, disabled, keepOpen, title }: MenuItemProps) {
+export function MenuItem({ onSelect, children, icon, selected, danger, disabled, keepOpen, title, kind = 'item' }: MenuItemProps) {
   const close = usePopoverClose();
   const button = (
     <button
       type="button"
-      role="menuitem"
+      role={kind === 'radio' ? 'menuitemradio' : 'menuitem'}
+      aria-checked={kind === 'radio' ? Boolean(selected) : undefined}
       disabled={disabled}
       onClick={() => {
         onSelect();

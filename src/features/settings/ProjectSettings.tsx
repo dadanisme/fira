@@ -71,17 +71,13 @@ export function ProjectSettings({ project }: { project: Project }) {
                 aria-label="Work page template"
                 className="w-64"
                 value={project.pageTemplateId ?? ''}
-                onChange={(e) => update({ pageTemplateId: e.target.value || null })}
-              >
-                <option value="">Blank page</option>
-                {templateMissing && <option value={project.pageTemplateId}>(missing template)</option>}
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.icon ? `${t.icon} ` : ''}
-                    {t.title || 'Untitled'}
-                  </option>
-                ))}
-              </Select>
+                onChange={(id) => update({ pageTemplateId: id || null })}
+                options={[
+                  { value: '', label: 'Blank page' },
+                  ...(templateMissing && project.pageTemplateId ? [{ value: project.pageTemplateId, label: '(missing template)' }] : []),
+                  ...templates.map((t) => ({ value: t.id, label: pageLabel(t) })),
+                ]}
+              />
             </SettingRow>
           </li>
           <li>
@@ -90,18 +86,13 @@ export function ProjectSettings({ project }: { project: Project }) {
                 aria-label="Work page parent"
                 className="w-64"
                 value={project.pageParentId ?? ''}
-                onChange={(e) => update({ pageParentId: e.target.value || null })}
-              >
-                <option value="">Top level</option>
-                {parentMissing && <option value={project.pageParentId}>(missing page)</option>}
-                {tree.map(({ page, depth }) => (
-                  <option key={page.id} value={page.id}>
-                    {'  '.repeat(depth)}
-                    {page.icon ? `${page.icon} ` : ''}
-                    {page.title || 'Untitled'}
-                  </option>
-                ))}
-              </Select>
+                onChange={(id) => update({ pageParentId: id || null })}
+                options={[
+                  { value: '', label: 'Top level' },
+                  ...(parentMissing && project.pageParentId ? [{ value: project.pageParentId, label: '(missing page)' }] : []),
+                  ...tree.map(({ page, depth }) => ({ value: page.id, label: pageLabel(page), depth })),
+                ]}
+              />
             </SettingRow>
           </li>
         </RowList>
@@ -114,6 +105,8 @@ export function ProjectSettings({ project }: { project: Project }) {
 }
 
 /** Pages in tree order (depth first, by rank) with their depth. */
+const pageLabel = (p: Page) => `${p.icon ? `${p.icon} ` : ''}${p.title || 'Untitled'}`;
+
 function pageTree(pages: readonly Page[]): { page: Page; depth: number }[] {
   const ids = new Set(pages.map((p) => p.id));
   const children = new Map<string | null, Page[]>();

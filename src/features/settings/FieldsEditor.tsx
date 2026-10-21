@@ -21,6 +21,8 @@ const TYPE_NAMES: Record<FieldType, string> = {
   url: 'URL',
 };
 
+const TYPE_OPTIONS = FIELD_TYPES.map((t) => ({ value: t, label: TYPE_NAMES[t] }));
+
 const hasOptions = (t: FieldType) => t === 'select' || t === 'multiselect';
 
 /** `Story points` → `storyPoints`, unique among `taken`. */
@@ -71,22 +73,15 @@ export function FieldsEditor({ project }: { project: Project }) {
                   aria-label={`${f.name} type`}
                   className="w-32"
                   value={f.type}
-                  onChange={(e) => {
-                    const t = e.target.value as FieldType;
-                    if (t === f.type) return;
+                  options={TYPE_OPTIONS}
+                  onChange={(t) => {
                     void confirmAction({
                       title: `Change “${f.name}” to ${TYPE_NAMES[t]}?`,
                       body: "Existing values that don't fit will look empty.",
                       confirmLabel: 'Change type',
                     }).then((ok) => ok && patch(f.id, { type: t, ...(hasOptions(t) && { options: f.options ?? [] }) }));
                   }}
-                >
-                  {FIELD_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {TYPE_NAMES[t]}
-                    </option>
-                  ))}
-                </Select>
+                />
                 <IconButton label="Move up" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
                   <ArrowUp size="0.75rem" />
                 </IconButton>
@@ -117,13 +112,7 @@ export function FieldsEditor({ project }: { project: Project }) {
       )}
       <form onSubmit={add} className="mt-2 flex gap-2">
         <Input aria-label="New field name" placeholder="New field" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
-        <Select aria-label="New field type" className="w-32" value={type} onChange={(e) => setType(e.target.value as FieldType)}>
-          {FIELD_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_NAMES[t]}
-            </option>
-          ))}
-        </Select>
+        <Select aria-label="New field type" className="w-32" value={type} options={TYPE_OPTIONS} onChange={setType} />
         <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!name.trim()}>
           Add field
         </Button>

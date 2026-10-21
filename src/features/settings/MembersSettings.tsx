@@ -153,13 +153,14 @@ function InviteForm({ members, invites, seats }: { members: Member[]; invites: I
             disabled={full}
             className="min-w-48 flex-1"
           />
-          <Select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as InviteRole)} disabled={full} className="w-28">
-            {INVITE_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_NAMES[r]}
-              </option>
-            ))}
-          </Select>
+          <Select
+            aria-label="Role"
+            value={role}
+            onChange={setRole}
+            options={INVITE_ROLES.map((r) => ({ value: r, label: ROLE_NAMES[r] }))}
+            disabled={full}
+            className="w-28"
+          />
           <Button type="submit" variant="primary" icon={<UserPlus size="0.8125rem" />} disabled={!normalized || Boolean(problem) || busy || full}>
             {busy ? 'Inviting…' : 'Invite'}
           </Button>
