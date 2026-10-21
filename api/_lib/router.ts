@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { Actor } from '../../shared/types.js';
-import { memberAuth, tokenActor, type Member } from './auth.js';
+import { memberAuth, tokenAuth, userActor, userAuth, type Caller, type MemberCaller, type TokenCaller } from './auth.js';
 import { HttpError, notFound, send, sendError } from './http.js';
 
 /**
@@ -9,8 +9,12 @@ import { HttpError, notFound, send, sendError } from './http.js';
  * function (Hobby plan limit) and avoids relying on catch-all filenames.
  */
 
-/** `token`: API token (`fira_...`). `member`: Firebase ID token of the owner or an invited member. `public`: none. */
-export type AuthMode = 'token' | 'member' | 'public';
+/**
+ * `token`: API token (`fira_...`), scoped to its workspace. `member`: Firebase ID token of a member
+ * of the route's `:wid` (non-members get 404). `user`: Firebase ID token of any verified account.
+ * `public`: none.
+ */
+export type AuthMode = 'token' | 'member' | 'user' | 'public';
 
 export interface RequestContext<A extends AuthMode = AuthMode> {
   req: VercelRequest;
@@ -18,9 +22,16 @@ export interface RequestContext<A extends AuthMode = AuthMode> {
   params: Record<string, string>;
   /** Query string (repeatable params supported via `getAll`). */
   query: URLSearchParams;
+  /** user/member: `{ type: 'user', id: uid, name }`; token: the token (with `via`). */
   actor: A extends 'public' ? null : Actor;
-  /** The signed-in member, for `member` routes. */
-  member: A extends 'member' ? Member : null;
+  /** token: the token's workspace; member: `params.wid`. */
+  workspaceId: A extends 'token' | 'member' ? string : null;
+  /** The caller as a member of `params.wid`, for `member` routes. */
+  member: A extends 'member' ? MemberCaller : null;
+  /** The signed-in account, for `member` and `user` routes. */
+  user: A extends 'member' | 'user' ? Caller : null;
+  /** The API token, for `token` routes. */
+  token: A extends 'token' ? TokenCaller : null;
 }
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -33,7 +44,8 @@ export interface Route {
 }
 
 /**
- * Declares a route. `pattern` is relative to `/api/v1`, e.g. `/cards/:key/comments`.
+ * Declares a route. `pattern` is relative to `/api/v1`, e.g. `/cards/:key/comments`; `member`
+ * routes must have a `:wid` segment.
  * The handler returns a JSON-able value (200), or a `Reply` (see http.ts), or throws `HttpError`.
  */
 export function route<A extends AuthMode>(
@@ -42,6 +54,7 @@ export function route<A extends AuthMode>(
   auth: A,
   handler: (ctx: RequestContext<A>) => Promise<unknown>,
 ): Route {
+  if (auth === 'member' && !pattern.includes('/:wid')) throw new Error(`member route ${pattern} needs a :wid segment`);
   return { method, segments: split(pattern), auth, handler: handler as Route['handler'] };
 }
 
@@ -66,9 +79,21 @@ export function createRouter(routes: readonly Route[]) {
         throw new HttpError(405, 'method_not_allowed', `${req.method} not allowed`);
       }
 
-      const member = hit.route.auth === 'member' ? await memberAuth(req) : null;
-      const actor = hit.route.auth === 'token' ? await tokenActor(req) : (member?.actor ?? null);
-      send(res, await hit.route.handler({ req, params: hit.params, query: url.searchParams, actor, member }));
+      const { auth } = hit.route;
+      const member = auth === 'member' ? await memberAuth(req, hit.params.wid) : null;
+      const user = auth === 'user' ? await userAuth(req) : member;
+      const token = auth === 'token' ? await tokenAuth(req) : null;
+      const ctx: RequestContext = {
+        req,
+        params: hit.params,
+        query: url.searchParams,
+        actor: token?.actor ?? (user && userActor(user)),
+        workspaceId: token?.workspaceId ?? member?.workspaceId ?? null,
+        member,
+        user,
+        token,
+      };
+      send(res, await hit.route.handler(ctx));
     } catch (err) {
       sendError(res, err);
     }

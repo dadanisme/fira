@@ -5,10 +5,13 @@
  *
  * which runs `firebase emulators:exec --only firestore,storage,auth --project demo-fira`
  * around this script. It refuses to run without FIRESTORE_EMULATOR_HOST, so it can
- * never touch a real project. The API is served by scripts/api-dev-server.ts.
+ * never touch a real project. The API is served by scripts/api-dev-server.ts; invite emails go to a
+ * local Resend stub (RESEND_API_URL) that records them and can be told to fail.
  */
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import { createServer } from 'node:http';
+import { Timestamp } from 'firebase-admin/firestore';
 
 for (const v of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST']) {
   if (!process.env[v]) {
@@ -27,8 +30,31 @@ process.env.FIREBASE_SERVICE_ACCOUNT = JSON.stringify({
   client_email: `smoke@${PROJECT_ID}.iam.gserviceaccount.com`,
   private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
 });
-process.env.OWNER_EMAIL = OWNER;
 process.env.VITE_FIREBASE_STORAGE_BUCKET = BUCKET;
+
+// ---------------------------------------------------------------- Resend stub
+
+interface SentEmail {
+  path: string | undefined;
+  auth: string | undefined;
+  body: { from: string; to: string[]; subject: string; html: string; text: string };
+}
+const sentEmails: SentEmail[] = [];
+let resendFails = false;
+const resendStub = createServer(async (req, res) => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  sentEmails.push({ path: req.url, auth: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString() || '{}') });
+  res.writeHead(resendFails ? 500 : 200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(resendFails ? { name: 'application_error', message: 'stub failure' } : { id: 'em_smoke' }));
+});
+await new Promise<void>((resolve) => resendStub.listen(0, '127.0.0.1', resolve));
+const stubAddress = resendStub.address();
+process.env.RESEND_API_URL = `http://127.0.0.1:${typeof stubAddress === 'object' && stubAddress ? stubAddress.port : 0}`;
+const RESEND_KEY = 're_smoke_key';
+process.env.RESEND_API_KEY = RESEND_KEY;
+process.env.INVITE_FROM = 'Fira <invites@mail.example.com>';
+process.env.APP_URL = 'https://fira.test/';
 
 const { startServer } = await import('./api-dev-server.js');
 const { firestore, adminAuth, bucket } = await import('../api/_lib/admin.js');
@@ -87,28 +113,53 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 const db = firestore();
-const activityOf = async (cardId: string) =>
-  (await db.collection('cards').doc(cardId).collection('activity').orderBy('at').get()).docs.map((d) => d.data());
+const wsDoc = (wid: string) => db.collection('workspaces').doc(wid);
+/** `/workspaces/{wid}` + rest. */
+const W = (wid: string, rest = '') => `/workspaces/${wid}${rest}`;
+const enc = encodeURIComponent;
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------------------------------------------------------------- owner + seed data
 
-/** Creates an emulator user and signs in, returning its Firebase ID token and uid. */
-async function signInAs(email: string, displayName: string): Promise<{ idToken: string; uid: string }> {
+const PASSWORD = 'smoke-password';
+
+/** Signs an existing emulator user in (a fresh ID token, with the current profile claims). */
+async function signIn(email: string): Promise<string> {
   const host = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1`;
-  const password = 'smoke-password';
-  const user = await adminAuth().createUser({ email, password, emailVerified: true, displayName });
   const res = await fetch(`${host}/accounts:signInWithPassword?key=fake`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, returnSecureToken: true }),
+    body: JSON.stringify({ email, password: PASSWORD, returnSecureToken: true }),
   });
   const { idToken } = (await res.json()) as { idToken: string };
-  assert.ok(idToken && user.uid);
-  return { idToken, uid: user.uid };
+  assert.ok(idToken);
+  return idToken;
 }
 
-const projectRef = db.collection('projects').doc('proj-smk');
+interface User {
+  idToken: string;
+  uid: string;
+  email: string;
+}
+
+/** Creates an emulator user and signs in, returning its Firebase ID token and uid. */
+async function signInAs(email: string, displayName: string, emailVerified = true): Promise<User> {
+  const user = await adminAuth().createUser({ email, password: PASSWORD, emailVerified, displayName });
+  return { idToken: await signIn(email), uid: user.uid, email: email.toLowerCase() };
+}
+
+const { idToken, uid: ownerUid } = await signInAs(OWNER, 'Owner');
+console.log(`API at ${BASE}\n`);
+
+// Workspace A ("acme"), created through the API; the content tests run inside it.
+const createdA = await call('POST', '/workspaces', { auth: idToken, body: { name: 'Acme', slug: 'acme' } });
+assert.equal(createdA.status, 201, JSON.stringify(createdA.body));
+const widA: string = createdA.body.id;
+const wsA = wsDoc(widA);
+const activityOf = async (cardId: string) =>
+  (await wsA.collection('cards').doc(cardId).collection('activity').orderBy('at').get()).docs.map((d) => d.data());
+
+const projectRef = wsA.collection('projects').doc('proj-smk');
 const columns = [
   { id: 'col-todo', name: 'To Do' },
   { id: 'col-doing', name: 'In Progress' },
@@ -131,7 +182,7 @@ await projectRef.set({
   rank: 'a0',
   createdAt: new Date(),
 });
-await db.collection('projects').doc('proj-oth').set({
+await wsA.collection('projects').doc('proj-oth').set({
   key: 'OTH',
   name: 'Other',
   columns: [{ id: 'o1', name: 'Backlog' }],
@@ -140,10 +191,7 @@ await db.collection('projects').doc('proj-oth').set({
   rank: 'a1',
   createdAt: new Date(),
 });
-await db.collection('labels').doc('lbl-bug').set({ name: 'Bug', color: 'red' });
-
-const { idToken, uid: ownerUid } = await signInAs(OWNER, 'Owner');
-console.log(`API at ${BASE}\n`);
+await wsA.collection('labels').doc('lbl-bug').set({ name: 'Bug', color: 'red' });
 
 // ---------------------------------------------------------------- meta + auth
 
@@ -175,40 +223,46 @@ await test('unknown route → 404 JSON; wrong method → 405', async () => {
 });
 
 await test('token routes reject API tokens / no auth; owner ID token works', async () => {
-  expectStatus(await call('GET', '/tokens', { auth: null }), 401, 'unauthorized');
-  expectStatus(await call('GET', '/tokens', { auth: 'garbage' }), 401, 'unauthorized');
-  const res = await call('POST', '/tokens', { auth: idToken, body: { name: 'smoke' } });
+  const T = W(widA, '/tokens');
+  expectStatus(await call('GET', T, { auth: null }), 401, 'unauthorized');
+  expectStatus(await call('GET', T, { auth: 'garbage' }), 401, 'unauthorized');
+  const res = await call('POST', T, { auth: idToken, body: { name: 'smoke' } });
   expectStatus(res, 201);
   assert.match(res.body.secret, /^fira_[0-9A-Za-z]{32}$/);
   assert.equal(res.body.token.name, 'smoke');
   assert.equal(res.body.token.hash, undefined);
   assert.equal(res.body.token.prefix, res.body.secret.slice(0, 8));
+  assert.equal(res.body.token.workspaceId, widA);
+  assert.deepEqual([res.body.token.userId, res.body.token.userEmail, res.body.token.userName], [ownerUid, OWNER, 'Owner']);
   secret = res.body.secret;
-  expectStatus(await call('POST', '/tokens', { auth: idToken, body: { name: '' } }), 422, 'unprocessable');
-  expectStatus(await call('POST', '/tokens', { auth: idToken, body: { name: 'x', color: 'neon' } }), 422, 'unprocessable');
-  expectStatus(await call('GET', '/tokens', { auth: secret }), 401);
+  expectStatus(await call('POST', T, { auth: idToken, body: { name: '' } }), 422, 'unprocessable');
+  expectStatus(await call('POST', T, { auth: idToken, body: { name: 'x', color: 'neon' } }), 422, 'unprocessable');
+  expectStatus(await call('GET', T, { auth: secret }), 401);
+  expectStatus(await call('GET', '/tokens', { auth: idToken }), 404, 'not_found');
 });
 
-await test('GET /tokens lists; DELETE /tokens/{id} revokes (revoked token → 401)', async () => {
-  const made = await call('POST', '/tokens', { auth: idToken, body: { name: 'temp', color: 'blue' } });
+await test('GET tokens lists; DELETE tokens/{tid} revokes (revoked token → 401)', async () => {
+  const made = await call('POST', W(widA, '/tokens'), { auth: idToken, body: { name: 'temp', color: 'blue' } });
   expectStatus(made, 201);
-  const list = await call('GET', '/tokens', { auth: idToken });
+  const list = await call('GET', W(widA, '/tokens'), { auth: idToken });
   expectStatus(list, 200);
   assert.equal(list.body.items.length, 2);
   assert.equal(list.body.nextCursor, null);
   expectStatus(await call('GET', '/me', { auth: made.body.secret }), 200);
-  const revoked = await call('DELETE', `/tokens/${made.body.token.id}`, { auth: idToken });
+  const revoked = await call('DELETE', W(widA, `/tokens/${made.body.token.id}`), { auth: idToken });
   expectStatus(revoked, 200);
   assert.equal(revoked.body.revoked, true);
   expectStatus(await call('GET', '/me', { auth: made.body.secret }), 401, 'unauthorized');
-  expectStatus(await call('DELETE', '/tokens/nope', { auth: idToken }), 404);
+  expectStatus(await call('DELETE', W(widA, '/tokens/nope'), { auth: idToken }), 404);
 });
 
-await test('GET /me returns the token actor', async () => {
+await test('GET /me returns the token actor and its workspace', async () => {
   const res = await call('GET', '/me');
   expectStatus(res, 200);
   assert.equal(res.body.type, 'token');
   assert.equal(res.body.name, 'smoke');
+  assert.deepEqual(res.body.via, { id: ownerUid, name: 'Owner' });
+  assert.deepEqual(res.body.workspace, { id: widA, name: 'Acme', slug: 'acme' });
   expectStatus(await call('GET', '/me', { auth: null }), 401, 'unauthorized');
 });
 
@@ -299,7 +353,7 @@ await test('POST /cards creates an epic, cards and a subtask (numbers, defaults,
   assert.equal(card.body.dueDate, '2026-11-01');
   keys.card = card.body.key;
 
-  const backend = (await db.collection('labels').where('name', '==', 'Backend').get()).docs;
+  const backend = (await wsA.collection('labels').where('name', '==', 'Backend').get()).docs;
   assert.equal(backend.length, 1, 'new label doc created once');
   assert.ok(['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'].includes(backend[0].get('color')));
 
@@ -577,7 +631,7 @@ await test('attachments: upload (multipart), list with signed URL, download, del
   assert.equal(up.body.name, 'v1.txt');
   assert.equal(up.body.size, content.length);
   assert.equal(up.body.contentType, 'text/plain');
-  assert.equal(up.body.storagePath, `attachments/${card.id}/${up.body.id}/v1.txt`);
+  assert.equal(up.body.storagePath, `workspaces/${widA}/cards/${card.id}/${up.body.id}/v1.txt`);
   assert.equal(up.body.uploadedBy.name, 'smoke');
   assert.ok(up.body.url);
   const [exists] = await bucket().file(up.body.storagePath).exists();
@@ -639,7 +693,7 @@ await test('POST /pages (plain, child, template, from template) + validation', a
   assert.equal(root.body.icon, '🛠️');
   assert.equal(root.body.updatedBy.name, 'smoke');
   pages.root = root.body;
-  const versions = await db.collection('pages').doc(root.body.id).collection('versions').get();
+  const versions = await wsA.collection('pages').doc(root.body.id).collection('versions').get();
   assert.equal(versions.size, 1, 'initial version snapshot');
   assert.equal(versions.docs[0].get('version'), 1);
 
@@ -824,7 +878,7 @@ await test('page attachments: upload → permanent token URL, embed in content, 
   assert.equal(up.body.name, 'slide-01-v2.png');
   assert.equal(up.body.size, png.length);
   assert.equal(up.body.contentType, 'image/png');
-  assert.equal(up.body.storagePath, `pages/${page.id}/${up.body.id}/slide-01-v2.png`);
+  assert.equal(up.body.storagePath, `workspaces/${widA}/pages/${page.id}/${up.body.id}/slide-01-v2.png`);
   assert.equal(up.body.uploadedBy.name, 'smoke');
   assert.ok(up.body.createdAt);
   const url = new URL(up.body.url);
@@ -911,7 +965,7 @@ await test('POST /cards/{key}/page creates the page from the project template, l
   assert.equal((await call('GET', `/cards/${keys.card}`)).body.pageId, page.id);
   const last = (await activityOf(card.id)).at(-1)!;
   assert.deepEqual([last.kind, last.from, last.to], ['page', null, page.id]);
-  assert.equal((await db.collection('pages').doc(page.id).collection('versions').get()).size, 1);
+  assert.equal((await wsA.collection('pages').doc(page.id).collection('versions').get()).size, 1);
   expectStatus(await call('POST', `/cards/${keys.card}/page`, { body: {} }), 409, 'conflict');
 
   // Explicit template, project without parent → root level; an explicit unknown template → 422.
@@ -928,78 +982,499 @@ await test('POST /cards/{key}/page creates the page from the project template, l
   expectStatus(await call('POST', '/cards/SMK-404/page', { body: {} }), 404);
 });
 
-// ---------------------------------------------------------------- members + per-member tokens
+// ---------------------------------------------------------------- workspaces
 
 const { hashSecret } = await import('../api/_lib/auth.js');
-const MEMBER = 'alice@example.com';
-const alice = await signInAs('Alice@Example.com', 'Alice');
-const stranger = await signInAs('mallory@example.com', 'Mallory');
-const memberTokens: { secret: string; id: string } = { secret: '', id: '' };
+const ada = await signInAs('Ada@Example.com', 'Ada');
+const mia = await signInAs('mia@example.com', 'Mia');
+const sam = await signInAs('sam@example.com', 'Sam');
+const bea = await signInAs('bea@example.com', 'Bea');
+const xan = await signInAs('xan@example.com', 'Xan');
+const ids: Record<string, string> = {};
 
-await test('non-member Firebase user → 403 on token management', async () => {
-  expectStatus(await call('GET', '/tokens', { auth: stranger.idToken }), 403, 'forbidden');
-  expectStatus(await call('POST', '/tokens', { auth: stranger.idToken, body: { name: 'nope' } }), 403, 'forbidden');
-  expectStatus(await call('GET', '/tokens', { auth: alice.idToken }), 403, 'forbidden');
+/** Invites `user` to `wid` (by `inviter`) and accepts as them. */
+async function join(wid: string, inviter: string, user: User, role: 'admin' | 'member' = 'member') {
+  expectStatus(await call('POST', W(wid, '/invites'), { auth: inviter, body: { email: user.email, role } }), 201);
+  expectStatus(await call('POST', W(wid, `/invites/${enc(user.email)}/accept`), { auth: user.idToken }), 200);
+}
+
+const memberDoc = async (wid: string, uid: string) => (await wsDoc(wid).collection('members').doc(uid).get()).data();
+const inviteDoc = (wid: string, email: string) => wsDoc(wid).collection('invites').doc(email).get();
+
+await test('POST /workspaces creates the workspace, its slug and the owner membership', async () => {
+  assert.equal(createdA.body.name, 'Acme');
+  assert.equal(createdA.body.slug, 'acme');
+  assert.equal(createdA.body.ownerUid, ownerUid);
+  assert.equal(createdA.body.createdBy, ownerUid);
+  assert.match(createdA.body.createdAt, /Z$/);
+  assert.equal((await db.collection('slugs').doc('acme').get()).get('workspaceId'), widA);
+  const owner = await memberDoc(widA, ownerUid);
+  assert.equal(owner?.role, 'owner');
+  assert.equal(owner?.email, OWNER);
+  assert.equal(owner?.name, 'Owner');
+  assert.equal(owner?.uid, ownerUid);
+  assert.deepEqual([owner?.workspaceName, owner?.workspaceSlug], ['Acme', 'acme']);
+  assert.ok(owner?.joinedAt instanceof Timestamp && owner?.lastSignInAt instanceof Timestamp);
 });
 
-await test('member creates a token; its writes carry `via` the member', async () => {
-  await db.collection('members').doc(MEMBER).set({ email: MEMBER, role: 'member', addedAt: new Date(), addedBy: OWNER });
-  const res = await call('POST', '/tokens', { auth: alice.idToken, body: { name: 'CI bot' } });
+await test('POST /workspaces validation: auth, name, slug, reserved, taken', async () => {
+  const body = { name: 'Beta', slug: 'beta-x' };
+  expectStatus(await call('POST', '/workspaces', { auth: null, body }), 401, 'unauthorized');
+  expectStatus(await call('POST', '/workspaces', { auth: secret, body }), 401, 'unauthorized');
+  const unverified = await signInAs('unverified@example.com', 'Unverified', false);
+  expectStatus(await call('POST', '/workspaces', { auth: unverified.idToken, body }), 403, 'forbidden');
+  const as = (b: unknown) => call('POST', '/workspaces', { auth: bea.idToken, body: b });
+  expectStatus(await as({ name: 'Beta' }), 400, 'bad_request');
+  expectStatus(await as({ ...body, extra: 1 }), 400, 'bad_request');
+  expectStatus(await as({ name: '  ', slug: 'beta-x' }), 422, 'unprocessable');
+  expectStatus(await as({ name: 'x'.repeat(61), slug: 'beta-x' }), 422, 'unprocessable');
+  for (const slug of ['ab', 'a b', '1abc', 'abc-', 'a--bc', 'x'.repeat(33), 'api', 'workspaces', 'settings']) {
+    expectStatus(await as({ name: 'Beta', slug }), 422, 'unprocessable');
+  }
+  expectStatus(await as({ name: 'Beta', slug: 'acme' }), 409, 'slug_taken');
+  expectStatus(await as({ name: 'Beta', slug: ' ACME ' }), 409, 'slug_taken');
+  assert.equal((await db.collection('workspaces').where('ownerUid', '==', bea.uid).get()).size, 0, 'nothing created');
+});
+
+await test('a user owns at most 3 workspaces (422 workspace_limit)', async () => {
+  const two = await call('POST', '/workspaces', { auth: idToken, body: { name: 'Acme Two', slug: 'acme-two' } });
+  expectStatus(two, 201);
+  ids.two = two.body.id;
+  const three = await call('POST', '/workspaces', { auth: idToken, body: { name: 'Acme Three', slug: 'acme-three' } });
+  expectStatus(three, 201);
+  ids.three = three.body.id;
+  expectStatus(await call('POST', '/workspaces', { auth: idToken, body: { name: 'Four', slug: 'acme-four' } }), 422, 'workspace_limit');
+  assert.equal((await db.collection('slugs').doc('acme-four').get()).exists, false);
+});
+
+// ---------------------------------------------------------------- invites
+
+await test('POST invites stores the invite and emails it through Resend', async () => {
+  const before = sentEmails.length;
+  const res = await call('POST', W(widA, '/invites'), { auth: idToken, body: { email: ' Ada@Example.com ', role: 'admin' } });
   expectStatus(res, 201);
-  assert.equal(res.body.token.userEmail, MEMBER);
-  assert.equal(res.body.token.userId, alice.uid);
-  assert.equal(res.body.token.userName, 'Alice');
-  memberTokens.secret = res.body.secret;
-  memberTokens.id = res.body.token.id;
-  const me = await call('GET', '/me', { auth: memberTokens.secret });
-  expectStatus(me, 200);
-  assert.deepEqual(me.body, { type: 'token', id: memberTokens.id, name: 'CI bot', via: { id: alice.uid, name: 'Alice' } });
-  const card = await call('POST', '/cards', { auth: memberTokens.secret, body: { project: 'OTH', title: 'From CI' } });
-  expectStatus(card, 201);
-  assert.deepEqual(card.body.createdBy.via, { id: alice.uid, name: 'Alice' });
-  const acts = await activityOf(card.body.id);
-  assert.deepEqual(acts[0].actor.via, { id: alice.uid, name: 'Alice' });
+  assert.equal(res.body.emailSent, true);
+  assert.equal(res.body.emailError, undefined);
+  const invite = res.body.invite;
+  assert.equal(invite.id, 'ada@example.com');
+  assert.equal(invite.email, 'ada@example.com');
+  assert.equal(invite.role, 'admin');
+  assert.equal(invite.emailStatus, 'sent');
+  assert.deepEqual(invite.invitedBy, { uid: ownerUid, name: 'Owner', email: OWNER });
+  assert.deepEqual([invite.workspaceId, invite.workspaceName], [widA, 'Acme']);
+  assert.ok(invite.createdAt && invite.lastSentAt);
+
+  assert.equal(sentEmails.length, before + 1);
+  const email = sentEmails.at(-1)!;
+  assert.equal(email.path, '/emails');
+  assert.equal(email.auth, `Bearer ${RESEND_KEY}`);
+  assert.equal(email.body.from, 'Fira <invites@mail.example.com>');
+  assert.deepEqual(email.body.to, ['ada@example.com']);
+  assert.equal(email.body.subject, 'Owner invited you to Acme on fira');
+  assert.ok(email.body.html.includes('href="https://fira.test/workspaces"'), email.body.html);
+  assert.ok(email.body.text.includes('https://fira.test/workspaces'));
+  assert.ok(email.body.text.includes('Sign in with Google as ada@example.com'));
+  const stored = (await inviteDoc(widA, 'ada@example.com')).data();
+  assert.equal(stored?.emailStatus, 'sent');
+  assert.equal('emailError' in (stored ?? {}), false);
 });
 
-await test("member lists only their own tokens; owner lists everyone's; members can't revoke others'", async () => {
-  const mine = await call('GET', '/tokens', { auth: alice.idToken });
+await test('a failed email keeps the invite with emailStatus failed (provider error, or no key)', async () => {
+  resendFails = true;
+  const failed = await call('POST', W(widA, '/invites'), { auth: idToken, body: { email: mia.email } });
+  resendFails = false;
+  expectStatus(failed, 201);
+  assert.equal(failed.body.emailSent, false);
+  assert.match(failed.body.emailError, /500.*stub failure/);
+  assert.equal(failed.body.invite.role, 'member', 'default role');
+  assert.equal(failed.body.invite.emailStatus, 'failed');
+  assert.equal((await inviteDoc(widA, mia.email)).get('emailStatus'), 'failed');
+  assert.match((await inviteDoc(widA, mia.email)).get('emailError'), /stub failure/);
+
+  delete process.env.RESEND_API_KEY;
+  const before = sentEmails.length;
+  const unconfigured = await call('POST', W(widA, '/invites'), { auth: idToken, body: { email: xan.email } });
+  process.env.RESEND_API_KEY = RESEND_KEY;
+  expectStatus(unconfigured, 201);
+  assert.equal(unconfigured.body.emailSent, false);
+  assert.equal(unconfigured.body.emailError, 'Email is not configured');
+  assert.equal((await inviteDoc(widA, xan.email)).get('emailStatus'), 'failed');
+  assert.equal(sentEmails.length, before, 'nothing sent without a key');
+});
+
+await test('invite conflicts and validation', async () => {
+  const I = W(widA, '/invites');
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: 'ADA@example.com' } }), 409, 'already_invited');
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: OWNER } }), 409, 'already_member');
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: 'nope' } }), 422, 'unprocessable');
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: 'z@example.com', role: 'owner' } }), 422, 'unprocessable');
+  expectStatus(await call('POST', I, { auth: idToken, body: {} }), 400, 'bad_request');
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: 'z@example.com', extra: 1 } }), 400, 'bad_request');
+  expectStatus(await call('POST', I, { auth: sam.idToken, body: { email: 'z@example.com' } }), 404, 'not_found');
+  expectStatus(await call('POST', I, { auth: secret, body: { email: 'z@example.com' } }), 401, 'unauthorized');
+  expectStatus(await call('POST', W('nope', '/invites'), { auth: idToken, body: { email: 'z@example.com' } }), 404, 'not_found');
+});
+
+await test('resend: 429 within a minute; after the cooldown it sends again', async () => {
+  const R = W(widA, `/invites/${enc(mia.email)}/resend`);
+  expectStatus(await call('POST', R, { auth: idToken }), 429, 'too_many_requests');
+  await wsDoc(widA).collection('invites').doc(mia.email).update({ lastSentAt: Timestamp.fromMillis(Date.now() - 61_000) });
+  const before = sentEmails.length;
+  const res = await call('POST', R, { auth: idToken });
+  expectStatus(res, 200);
+  assert.equal(res.body.emailSent, true);
+  assert.equal(res.body.invite.emailStatus, 'sent');
+  assert.equal(res.body.invite.emailError, undefined, 'previous error cleared');
+  assert.equal(sentEmails.length, before + 1);
+  assert.deepEqual(sentEmails.at(-1)!.body.to, [mia.email]);
+  expectStatus(await call('POST', R, { auth: idToken }), 429, 'too_many_requests');
+  expectStatus(await call('POST', W(widA, '/invites/nobody%40example.com/resend'), { auth: idToken }), 404, 'not_found');
+});
+
+await test('accept: only the invitee; joins with the invite role; the invite is deleted', async () => {
+  const A = W(widA, `/invites/${enc('ada@example.com')}/accept`);
+  expectStatus(await call('POST', A, { auth: mia.idToken }), 404, 'not_found');
+  expectStatus(await call('POST', A, { auth: sam.idToken }), 404, 'not_found');
+  expectStatus(await call('POST', A, { auth: null }), 401, 'unauthorized');
+  const res = await call('POST', W(widA, `/invites/${enc('ADA@EXAMPLE.COM')}/accept`), { auth: ada.idToken });
+  expectStatus(res, 200);
+  assert.equal(res.body.workspace.id, widA);
+  assert.equal(res.body.workspace.slug, 'acme');
+  const m = res.body.member;
+  assert.deepEqual([m.id, m.uid, m.email, m.name, m.role], [ada.uid, ada.uid, 'ada@example.com', 'Ada', 'admin']);
+  assert.equal(m.invitedBy, ownerUid);
+  assert.deepEqual([m.workspaceName, m.workspaceSlug], ['Acme', 'acme']);
+  assert.ok(m.joinedAt && m.lastSignInAt);
+  assert.equal((await inviteDoc(widA, 'ada@example.com')).exists, false);
+  expectStatus(await call('POST', A, { auth: ada.idToken }), 404, 'not_found');
+
+  const joined = await call('POST', W(widA, `/invites/${enc(mia.email)}/accept`), { auth: mia.idToken });
+  expectStatus(joined, 200);
+  assert.equal(joined.body.member.role, 'member');
+});
+
+await test('decline (invitee) and revoke (admins only)', async () => {
+  const X = W(widA, `/invites/${enc(xan.email)}`);
+  expectStatus(await call('DELETE', X, { auth: xan.idToken }), 204);
+  assert.equal((await inviteDoc(widA, xan.email)).exists, false);
+  expectStatus(await call('DELETE', X, { auth: xan.idToken }), 404, 'not_found');
+
+  expectStatus(await call('POST', W(widA, '/invites'), { auth: mia.idToken, body: { email: 'yan@example.com' } }), 403, 'forbidden');
+  expectStatus(await call('POST', W(widA, '/invites'), { auth: idToken, body: { email: 'yan@example.com' } }), 201);
+  const Y = W(widA, `/invites/${enc('yan@example.com')}`);
+  expectStatus(await call('DELETE', Y, { auth: mia.idToken }), 403, 'forbidden');
+  expectStatus(await call('DELETE', Y, { auth: sam.idToken }), 404, 'not_found');
+  expectStatus(await call('DELETE', Y, { auth: ada.idToken }), 204);
+  assert.equal((await inviteDoc(widA, 'yan@example.com')).exists, false);
+  expectStatus(await call('DELETE', Y, { auth: ada.idToken }), 404, 'not_found');
+});
+
+await test('seat limit: 50 seats, pending invites included (422 seat_limit)', async () => {
+  const created = await call('POST', '/workspaces', { auth: sam.idToken, body: { name: 'Seats', slug: 'seats' } });
+  expectStatus(created, 201);
+  ids.seats = created.body.id;
+  const batch = db.batch();
+  for (let i = 0; i < 48; i++) {
+    const email = `seat${i}@example.com`;
+    batch.set(wsDoc(ids.seats).collection('invites').doc(email), {
+      email,
+      role: 'member',
+      invitedBy: { uid: sam.uid, name: 'Sam', email: sam.email },
+      createdAt: new Date(),
+      emailStatus: 'sent',
+      workspaceId: ids.seats,
+      workspaceName: 'Seats',
+    });
+  }
+  await batch.commit();
+  // 1 member + 48 invites = 49 seats: one more fits, then it is full.
+  expectStatus(await call('POST', W(ids.seats, '/invites'), { auth: sam.idToken, body: { email: 'seat49@example.com' } }), 201);
+  expectStatus(await call('POST', W(ids.seats, '/invites'), { auth: sam.idToken, body: { email: 'seat50@example.com' } }), 422, 'seat_limit');
+  expectStatus(await call('DELETE', W(ids.seats, `/invites/${enc('seat0@example.com')}`), { auth: sam.idToken }), 204);
+  expectStatus(await call('POST', W(ids.seats, '/invites'), { auth: sam.idToken, body: { email: 'seat50@example.com' } }), 201);
+});
+
+// ---------------------------------------------------------------- rename
+
+await test('rename: owner only; slug reservation swapped; members and invites updated', async () => {
+  const P = W(widA);
+  expectStatus(await call('PATCH', P, { auth: ada.idToken, body: { name: 'Nope' } }), 403, 'forbidden');
+  expectStatus(await call('PATCH', P, { auth: mia.idToken, body: { name: 'Nope' } }), 403, 'forbidden');
+  expectStatus(await call('PATCH', P, { auth: sam.idToken, body: { name: 'Nope' } }), 404, 'not_found');
+  expectStatus(await call('PATCH', P, { auth: idToken, body: { slug: 'Not valid' } }), 422, 'unprocessable');
+  expectStatus(await call('PATCH', P, { auth: idToken, body: { name: '' } }), 422, 'unprocessable');
+  expectStatus(await call('PATCH', P, { auth: idToken, body: { slug: 'acme-two' } }), 409, 'slug_taken');
+  expectStatus(await call('PATCH', P, { auth: idToken, body: { owner: 'x' } }), 400, 'bad_request');
+  expectStatus(await call('POST', W(widA, '/invites'), { auth: idToken, body: { email: 'zed@example.com' } }), 201);
+
+  const res = await call('PATCH', P, { auth: idToken, body: { name: 'Acme Corp', slug: 'acme-corp' } });
+  expectStatus(res, 200);
+  assert.deepEqual([res.body.id, res.body.name, res.body.slug], [widA, 'Acme Corp', 'acme-corp']);
+  assert.equal((await db.collection('slugs').doc('acme').get()).exists, false, 'old slug released');
+  assert.equal((await db.collection('slugs').doc('acme-corp').get()).get('workspaceId'), widA);
+  const members = (await wsDoc(widA).collection('members').get()).docs;
+  assert.equal(members.length, 3);
+  for (const m of members) assert.deepEqual([m.get('workspaceName'), m.get('workspaceSlug')], ['Acme Corp', 'acme-corp']);
+  assert.equal((await inviteDoc(widA, 'zed@example.com')).get('workspaceName'), 'Acme Corp');
+  const same = await call('PATCH', P, { auth: idToken, body: { name: 'Acme Corp' } });
+  expectStatus(same, 200);
+  assert.equal(same.body.slug, 'acme-corp');
+  // The released slug is free for others.
+  const reuse = await call('POST', '/workspaces', { auth: bea.idToken, body: { name: 'Beta', slug: 'acme' } });
+  expectStatus(reuse, 201);
+  ids.beta = reuse.body.id;
+});
+
+// ---------------------------------------------------------------- roles
+
+await test('roles: admins change non-owners (admins included); nobody changes the owner', async () => {
+  const M = (uid: string) => W(widA, `/members/${uid}`);
+  const promoted = await call('PATCH', M(mia.uid), { auth: ada.idToken, body: { role: 'admin' } });
+  expectStatus(promoted, 200);
+  assert.equal(promoted.body.role, 'admin');
+  assert.equal(promoted.body.uid, mia.uid);
+  const demoted = await call('PATCH', M(mia.uid), { auth: ada.idToken, body: { role: 'member' } });
+  expectStatus(demoted, 200);
+  assert.equal(demoted.body.role, 'member');
+  expectStatus(await call('PATCH', M(ownerUid), { auth: ada.idToken, body: { role: 'member' } }), 403, 'forbidden');
+  expectStatus(await call('PATCH', M(ownerUid), { auth: idToken, body: { role: 'admin' } }), 403, 'forbidden');
+  expectStatus(await call('PATCH', M(ada.uid), { auth: mia.idToken, body: { role: 'member' } }), 403, 'forbidden');
+  expectStatus(await call('PATCH', M(mia.uid), { auth: idToken, body: { role: 'owner' } }), 422, 'unprocessable');
+  expectStatus(await call('PATCH', M(mia.uid), { auth: idToken, body: {} }), 400, 'bad_request');
+  expectStatus(await call('PATCH', M('nobody'), { auth: idToken, body: { role: 'admin' } }), 404, 'not_found');
+  expectStatus(await call('PATCH', M(mia.uid), { auth: sam.idToken, body: { role: 'admin' } }), 404, 'not_found');
+  assert.equal((await memberDoc(widA, ownerUid))?.role, 'owner');
+});
+
+// ---------------------------------------------------------------- tokens per workspace
+
+const miaTokens: Record<string, { id: string; secret: string }> = {};
+
+await test('tokens are per workspace: members see their own, admins see and revoke all', async () => {
+  const T = W(widA, '/tokens');
+  for (const name of ['mia bot', 'mia temp']) {
+    const res = await call('POST', T, { auth: mia.idToken, body: { name } });
+    expectStatus(res, 201);
+    assert.equal(res.body.token.workspaceId, widA);
+    assert.deepEqual([res.body.token.userId, res.body.token.userEmail, res.body.token.userName], [mia.uid, mia.email, 'Mia']);
+    miaTokens[name] = { id: res.body.token.id, secret: res.body.secret };
+  }
+  const mine = await call('GET', T, { auth: mia.idToken });
   expectStatus(mine, 200);
-  assert.deepEqual(
-    mine.body.items.map((t: { id: string }) => t.id),
-    [memberTokens.id],
-  );
-  const all = await call('GET', '/tokens', { auth: idToken });
+  assert.deepEqual(mine.body.items.map((t: any) => t.id), [miaTokens['mia temp'].id, miaTokens['mia bot'].id], 'own only, newest first');
+  const all = await call('GET', T, { auth: ada.idToken });
   expectStatus(all, 200);
-  assert.ok(all.body.items.length >= 3);
-  assert.ok(all.body.items.some((t: { id: string; userEmail?: string }) => t.id === memberTokens.id && t.userEmail === MEMBER));
-  const times = all.body.items.map((t: { createdAt: string }) => t.createdAt);
-  assert.deepEqual(times, [...times].sort().reverse(), 'newest first');
-  const ownerToken = all.body.items.find((t: { userEmail?: string }) => t.userEmail === OWNER);
-  expectStatus(await call('DELETE', `/tokens/${ownerToken.id}`, { auth: alice.idToken }), 404, 'not_found');
+  assert.ok(all.body.items.some((t: any) => t.userId === ownerUid));
+  assert.ok(all.body.items.some((t: any) => t.id === miaTokens['mia bot'].id));
+  assert.ok(all.body.items.every((t: any) => t.workspaceId === widA && t.hash === undefined));
+  const ownerToken = all.body.items.find((t: any) => t.userId === ownerUid);
+  expectStatus(await call('DELETE', W(widA, `/tokens/${ownerToken.id}`), { auth: mia.idToken }), 404, 'not_found');
+  const revoked = await call('DELETE', W(widA, `/tokens/${miaTokens['mia temp'].id}`), { auth: ada.idToken });
+  expectStatus(revoked, 200);
+  assert.equal(revoked.body.revoked, true);
+  // A token is invisible from another workspace, even to its owner.
+  expectStatus(await call('DELETE', W(ids.two, `/tokens/${ownerToken.id}`), { auth: idToken }), 404, 'not_found');
+  expectStatus(await call('GET', W(ids.two, '/tokens'), { auth: mia.idToken }), 404, 'not_found');
+
+  const me = await call('GET', '/me', { auth: miaTokens['mia bot'].secret });
+  expectStatus(me, 200);
+  assert.deepEqual(me.body, {
+    type: 'token',
+    id: miaTokens['mia bot'].id,
+    name: 'mia bot',
+    via: { id: mia.uid, name: 'Mia' },
+    workspace: { id: widA, name: 'Acme Corp', slug: 'acme-corp' },
+  });
+  const card = await call('POST', '/cards', { auth: miaTokens['mia bot'].secret, body: { project: 'OTH', title: 'From Mia' } });
+  expectStatus(card, 201);
+  assert.deepEqual(card.body.createdBy.via, { id: mia.uid, name: 'Mia' });
+  assert.deepEqual((await activityOf(card.body.id))[0].actor.via, { id: mia.uid, name: 'Mia' });
 });
 
-await test('legacy token without a creator works (no `via`)', async () => {
+await test('a token without a workspace or creator is rejected', async () => {
   const legacy = `fira_${'L'.repeat(32)}`;
   await db.collection('tokens').doc('legacy').set({ name: 'old', color: 'gray', hash: hashSecret(legacy), prefix: legacy.slice(0, 8), createdAt: new Date(), revoked: false });
-  const me = await call('GET', '/me', { auth: legacy });
-  expectStatus(me, 200);
-  assert.deepEqual(me.body, { type: 'token', id: 'legacy', name: 'old' });
+  expectStatus(await call('GET', '/me', { auth: legacy }), 401, 'unauthorized');
+  await db.collection('tokens').doc('legacy').update({ workspaceId: widA });
+  expectStatus(await call('GET', '/me', { auth: legacy }), 401, 'unauthorized');
 });
 
-await test("removing a member makes their token 401 and their ID token 403", async () => {
-  await db.collection('members').doc(MEMBER).delete();
-  expectStatus(await call('GET', '/me', { auth: memberTokens.secret }), 401, 'unauthorized');
-  expectStatus(await call('GET', '/cards?project=OTH', { auth: memberTokens.secret }), 401, 'unauthorized');
-  expectStatus(await call('GET', '/tokens', { auth: alice.idToken }), 403, 'forbidden');
-  // The owner's own tokens are unaffected; re-inviting restores the member's token.
+// ---------------------------------------------------------------- remove + leave
+
+await test('removing a member revokes their tokens there and cuts access', async () => {
+  expectStatus(await call('DELETE', W(widA, `/members/${ada.uid}`), { auth: mia.idToken }), 403, 'forbidden');
+  expectStatus(await call('DELETE', W(widA, `/members/${ownerUid}`), { auth: ada.idToken }), 403, 'forbidden');
+  expectStatus(await call('DELETE', W(widA, '/members/nobody'), { auth: ada.idToken }), 404, 'not_found');
+  expectStatus(await call('DELETE', W(widA, `/members/${mia.uid}`), { auth: ada.idToken }), 204);
+  assert.equal(await memberDoc(widA, mia.uid), undefined);
+  expectStatus(await call('GET', '/me', { auth: miaTokens['mia bot'].secret }), 401, 'unauthorized');
+  expectStatus(await call('GET', '/cards?project=OTH', { auth: miaTokens['mia bot'].secret }), 401, 'unauthorized');
+  assert.equal((await db.collection('tokens').doc(miaTokens['mia bot'].id).get()).get('revoked'), true, 'marked revoked');
+  expectStatus(await call('GET', W(widA, '/tokens'), { auth: mia.idToken }), 404, 'not_found');
+  // Other members' tokens keep working; a re-invite does not revive revoked tokens.
   expectStatus(await call('GET', '/me'), 200);
-  await db.collection('members').doc(MEMBER).set({ email: MEMBER, role: 'member', addedAt: new Date(), addedBy: OWNER });
-  expectStatus(await call('GET', '/me', { auth: memberTokens.secret }), 200);
+  await join(widA, idToken, mia);
+  expectStatus(await call('GET', '/me', { auth: miaTokens['mia bot'].secret }), 401, 'unauthorized');
+});
+
+await test('leave: members and admins can leave; the owner must transfer first', async () => {
+  const miaToken = await call('POST', W(widA, '/tokens'), { auth: mia.idToken, body: { name: 'leaving' } });
+  expectStatus(miaToken, 201);
+  expectStatus(await call('DELETE', W(widA, `/members/${mia.uid}`), { auth: mia.idToken }), 204);
+  assert.equal(await memberDoc(widA, mia.uid), undefined);
+  expectStatus(await call('GET', '/me', { auth: miaToken.body.secret }), 401, 'unauthorized');
+  expectStatus(await call('DELETE', W(widA, `/members/${mia.uid}`), { auth: mia.idToken }), 404, 'not_found');
+  expectStatus(await call('DELETE', W(widA, `/members/${ownerUid}`), { auth: idToken }), 403, 'forbidden');
+  assert.equal((await memberDoc(widA, ownerUid))?.role, 'owner');
+});
+
+// ---------------------------------------------------------------- transfer
+
+await test('transfer: the target becomes owner and the old owner an admin; limits and permissions', async () => {
+  const X = W(widA, '/transfer');
+  expectStatus(await call('POST', X, { auth: ada.idToken, body: { uid: ada.uid } }), 403, 'forbidden');
+  expectStatus(await call('POST', X, { auth: idToken, body: { uid: ownerUid } }), 422, 'unprocessable');
+  expectStatus(await call('POST', X, { auth: idToken, body: { uid: mia.uid } }), 404, 'not_found');
+  expectStatus(await call('POST', X, { auth: idToken, body: {} }), 400, 'bad_request');
+
+  const res = await call('POST', X, { auth: idToken, body: { uid: ada.uid } });
+  expectStatus(res, 200);
+  assert.equal(res.body.ownerUid, ada.uid);
+  assert.equal((await memberDoc(widA, ada.uid))?.role, 'owner');
+  assert.equal((await memberDoc(widA, ownerUid))?.role, 'admin');
+  // The old owner is now an admin: owner-only actions are refused, admin ones still work.
+  expectStatus(await call('PATCH', W(widA), { auth: idToken, body: { name: 'Mine' } }), 403, 'forbidden');
+  expectStatus(await call('DELETE', W(widA, `/members/${ada.uid}`), { auth: idToken }), 403, 'forbidden');
+  // And back: the owner then owns 3 again.
+  expectStatus(await call('POST', X, { auth: ada.idToken, body: { uid: ownerUid } }), 200);
+  assert.equal((await memberDoc(widA, ada.uid))?.role, 'admin');
+  assert.equal((await wsDoc(widA).get()).get('ownerUid'), ownerUid);
+
+  // Bea's workspace "acme" (the released slug): the owner joins it but already owns 3.
+  await join(ids.beta, bea.idToken, { idToken, uid: ownerUid, email: OWNER });
+  expectStatus(await call('POST', W(ids.beta, '/transfer'), { auth: bea.idToken, body: { uid: ownerUid } }), 422, 'workspace_limit');
+  assert.equal((await wsDoc(ids.beta).get()).get('ownerUid'), bea.uid);
+});
+
+// ---------------------------------------------------------------- isolation
+
+await test('workspaces are isolated: same keys, own labels, pages and projects', async () => {
+  await wsDoc(ids.beta).collection('projects').doc('proj-b').set({
+    key: 'SMK',
+    name: 'Smoke B',
+    columns: [{ id: 'b1', name: 'Todo' }],
+    fields: [],
+    nextNumber: 1,
+    rank: 'a0',
+    createdAt: new Date(),
+  });
+  const made = await call('POST', W(ids.beta, '/tokens'), { auth: bea.idToken, body: { name: 'bea bot' } });
+  expectStatus(made, 201);
+  const b = made.body.secret;
+  expectStatus(await call('GET', '/labels', { auth: b }), 200);
+  assert.deepEqual((await call('GET', '/labels', { auth: b })).body.items, []);
+  const card = await call('POST', '/cards', { auth: b, body: { project: 'smk', title: 'B card', labels: ['Bug'] } });
+  expectStatus(card, 201);
+  assert.equal(card.body.key, 'SMK-1');
+  assert.equal(card.body.status, 'Todo');
+  const inA = await call('GET', '/cards/SMK-1');
+  const inB = await call('GET', '/cards/SMK-1', { auth: b });
+  assert.equal(inA.body.title, 'Epic one');
+  assert.equal(inB.body.title, 'B card');
+  assert.notEqual(inA.body.id, inB.body.id);
+  const labelsB = (await call('GET', '/labels', { auth: b })).body.items;
+  assert.equal(labelsB.length, 1);
+  assert.equal(labelsB[0].name, 'Bug');
+  assert.notEqual(labelsB[0].id, 'lbl-bug');
+  assert.deepEqual((await call('GET', '/projects', { auth: b })).body.items.map((p: any) => p.id), ['proj-b']);
+  assert.equal((await call('GET', '/cards', { auth: b })).body.items.length, 1);
+  expectStatus(await call('GET', `/pages/${pages.root.id}`, { auth: b }), 404, 'not_found');
+  expectStatus(await call('GET', `/cards/${keys.card}`, { auth: b }), 404, 'not_found');
+  expectStatus(await call('PATCH', `/pages/${pages.root.id}`, { auth: b, body: { icon: '🙂' } }), 404, 'not_found');
+  assert.equal((await call('GET', '/pages', { auth: b })).body.items.length, 0);
+  const me = await call('GET', '/me', { auth: b });
+  assert.deepEqual(me.body.workspace, { id: ids.beta, name: 'Beta', slug: 'acme' });
+  // API tokens never work on management routes.
+  expectStatus(await call('GET', W(ids.beta, '/tokens'), { auth: b }), 401, 'unauthorized');
+});
+
+// ---------------------------------------------------------------- account sync
+
+await test('POST /account/sync refreshes name, photo and last sign-in on every membership', async () => {
+  expectStatus(await call('POST', '/account/sync', { auth: secret }), 401, 'unauthorized');
+  await adminAuth().updateUser(ownerUid, { displayName: 'Owner Two', photoURL: 'https://example.com/owner.png' });
+  const fresh = await signIn(OWNER);
+  expectStatus(await call('POST', '/account/sync', { auth: fresh }), 204);
+  for (const wid of [widA, ids.two, ids.three, ids.beta]) {
+    const m = await memberDoc(wid, ownerUid);
+    assert.equal(m?.name, 'Owner Two', wid);
+    assert.equal(m?.photoURL, 'https://example.com/owner.png');
+    assert.ok(m?.lastSignInAt instanceof Timestamp);
+  }
+  assert.equal((await memberDoc(widA, ada.uid))?.name, 'Ada', "others' memberships untouched");
+  await adminAuth().updateUser(ownerUid, { displayName: 'Owner', photoURL: null });
+  expectStatus(await call('POST', '/account/sync', { auth: await signIn(OWNER) }), 204);
+  const reset = await memberDoc(widA, ownerUid);
+  assert.equal(reset?.name, 'Owner');
+  assert.equal('photoURL' in (reset ?? {}), false, 'removed photo is cleared');
+});
+
+// ---------------------------------------------------------------- delete
+
+await test('DELETE workspace: owner + typed slug; hard-deletes content, files, members, invites, tokens, slug', async () => {
+  const wid = ids.three;
+  const ws = wsDoc(wid);
+  await join(wid, idToken, ada);
+  expectStatus(await call('POST', W(wid, '/invites'), { auth: idToken, body: { email: 'pending@example.com' } }), 201);
+  await ws.collection('projects').doc('p3').set({ key: 'DEL', name: 'Doomed', columns: [{ id: 'd1', name: 'Todo' }], fields: [], nextNumber: 1, rank: 'a0', createdAt: new Date() });
+  const t = await call('POST', W(wid, '/tokens'), { auth: idToken, body: { name: 'doomed' } });
+  expectStatus(t, 201);
+  const token = t.body.secret;
+  const adaToken = (await call('POST', W(wid, '/tokens'), { auth: ada.idToken, body: { name: 'ada doomed' } })).body.secret;
+  const card = await call('POST', '/cards', { auth: token, body: { project: 'DEL', title: 'Doomed card' } });
+  expectStatus(card, 201);
+  expectStatus(await call('POST', `/cards/${card.body.key}/comments`, { auth: token, body: { body: 'bye' } }), 201);
+  const form = new FormData();
+  form.append('file', new Blob(['doomed']), 'doomed.txt');
+  expectStatus(await call('POST', `/cards/${card.body.key}/attachments`, { auth: token, form }), 201);
+  const page = await call('POST', '/pages', { auth: token, body: { title: 'Doomed page' } });
+  const pform = new FormData();
+  pform.append('file', new Blob(['img']), 'doomed.png');
+  expectStatus(await call('POST', `/pages/${page.body.id}/attachments`, { auth: token, form: pform }), 201);
+  const [filesBefore] = await bucket().getFiles({ prefix: `workspaces/${wid}/` });
+  assert.equal(filesBefore.length, 2);
+
+  expectStatus(await call('DELETE', W(wid), { auth: ada.idToken, body: { confirm: 'acme-three' } }), 403, 'forbidden');
+  expectStatus(await call('DELETE', W(wid), { auth: idToken, body: { confirm: 'acme' } }), 422, 'unprocessable');
+  expectStatus(await call('DELETE', W(wid), { auth: idToken }), 422, 'unprocessable');
+  expectStatus(await call('DELETE', W(wid), { auth: sam.idToken, body: { confirm: 'acme-three' } }), 404, 'not_found');
+  expectStatus(await call('DELETE', W(wid), { auth: idToken, body: { confirm: 'acme-three' } }), 204);
+
+  assert.equal((await ws.get()).exists, false, 'workspace doc gone');
+  assert.deepEqual(await ws.listCollections(), [], 'nothing left under the workspace');
+  assert.equal((await db.collection('slugs').doc('acme-three').get()).exists, false, 'slug released');
+  assert.equal((await db.collection('tokens').where('workspaceId', '==', wid).get()).size, 0, 'tokens deleted');
+  const [filesAfter] = await bucket().getFiles({ prefix: `workspaces/${wid}/` });
+  assert.equal(filesAfter.length, 0, 'storage prefix emptied');
+  expectStatus(await call('GET', '/me', { auth: token }), 401, 'unauthorized');
+  expectStatus(await call('GET', '/me', { auth: adaToken }), 401, 'unauthorized');
+  const adaMemberships = (await db.collectionGroup('members').where('uid', '==', ada.uid).get()).docs.map((d) => d.ref.parent.parent!.id);
+  assert.deepEqual(adaMemberships, [widA]);
+  expectStatus(await call('DELETE', W(wid), { auth: idToken, body: { confirm: 'acme-three' } }), 404, 'not_found');
+
+  // Other workspaces are untouched.
+  expectStatus(await call('GET', '/cards/SMK-1'), 200);
+  assert.ok((await wsDoc(ids.beta).get()).exists);
+  const [filesA] = await bucket().getFiles({ prefix: `workspaces/${widA}/` });
+  assert.ok(filesA.length > 0, "A's files remain");
+  // The slot is free again: the owner can create a third workspace.
+  expectStatus(await call('POST', '/workspaces', { auth: idToken, body: { name: 'Acme Three', slug: 'acme-three' } }), 201);
 });
 
 // ---------------------------------------------------------------- done
 
 server.close();
+resendStub.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) {

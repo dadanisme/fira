@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { VercelRequest } from '@vercel/node';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import type { Actor } from '../../shared/types.js';
+import type { Actor, WorkspaceRole } from '../../shared/types.js';
 import { randomId } from '../../shared/ids.js';
+import { isAdminRole } from '../../shared/workspaces.js';
 import { adminAuth, firestore } from './admin.js';
-import { forbidden, unauthorized } from './http.js';
+import { forbidden, notFound, unauthorized } from './http.js';
 
 const SECRET_RE = /^fira_[0-9A-Za-z]{32}$/;
 const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
@@ -24,66 +25,99 @@ function bearer(req: VercelRequest): string {
   return match[1];
 }
 
-function ownerEmail(): string {
-  const owner = process.env.OWNER_EMAIL;
-  if (!owner) throw new Error('OWNER_EMAIL is not set');
-  return owner.trim().toLowerCase();
-}
-
-/** Whether this (lowercased) email may use fira: the owner, or invited (`members/{email}` exists). */
-async function isMember(email: string): Promise<boolean> {
-  if (email === ownerEmail()) return true;
-  return (await firestore().collection('members').doc(email).get()).exists;
-}
-
-/**
- * Authenticates an API token (`Bearer fira_...`) and returns it as the Actor (with `via`, its
- * creator). Rejects tokens whose creator is no longer a member; legacy tokens without a
- * creator count as the owner's. Updates `lastUsedAt` (throttled).
- */
-export async function tokenActor(req: VercelRequest): Promise<Actor> {
-  const secret = bearer(req);
-  if (!SECRET_RE.test(secret)) throw unauthorized('Invalid API token');
-  const found = await firestore().collection('tokens').where('hash', '==', hashSecret(secret)).limit(1).get();
-  const doc = found.docs[0];
-  if (!doc || doc.get('revoked') === true) throw unauthorized('Invalid or revoked API token');
-  const creator = doc.get('userEmail') as string | undefined;
-  if (creator && !(await isMember(creator))) throw unauthorized("The token's creator is no longer a member");
-
-  const lastUsedAt = doc.get('lastUsedAt') as Timestamp | undefined;
-  if (!lastUsedAt || Date.now() - lastUsedAt.toMillis() > LAST_USED_THROTTLE_MS) {
-    await doc.ref.update({ lastUsedAt: FieldValue.serverTimestamp() });
-  }
-  const userId = doc.get('userId') as string | undefined;
-  return {
-    type: 'token',
-    id: doc.id,
-    name: doc.get('name') as string,
-    ...(userId && { via: { id: userId, name: (doc.get('userName') as string | undefined) ?? creator ?? 'Member' } }),
-  };
-}
-
-/** A signed-in member calling with a Firebase ID token. */
-export interface Member {
-  actor: Actor;
+/** A signed-in Google account (Firebase ID token), member of any workspace or none. */
+export interface Caller {
+  uid: string;
   /** Lowercased. */
   email: string;
-  isOwner: boolean;
+  name: string;
+  photoURL?: string;
+  /** When the user signed in (`auth_time`). */
+  authTime: Date;
 }
 
-/** Authenticates a member (owner or invited) by Firebase ID token (`Bearer <idToken>`), for token management. */
-export async function memberAuth(req: VercelRequest): Promise<Member> {
+/** A caller who is a member of `workspaceId`. */
+export interface MemberCaller extends Caller {
+  workspaceId: string;
+  role: WorkspaceRole;
+}
+
+/** An API token: its actor (with `via`, its creator) and the workspace it is scoped to. */
+export interface TokenCaller {
+  actor: Actor;
+  workspaceId: string;
+  tokenId: string;
+  userId: string;
+}
+
+/** The actor of a signed-in user (writes made through the app's API calls). */
+export function userActor(caller: Caller): Actor {
+  return { type: 'user', id: caller.uid, name: caller.name };
+}
+
+/** Verifies a Firebase ID token (`Bearer <idToken>`): 401 when invalid, 403 without a verified email. */
+export async function userAuth(req: VercelRequest): Promise<Caller> {
   let decoded;
   try {
     decoded = await adminAuth().verifyIdToken(bearer(req));
   } catch {
     throw unauthorized('Invalid Firebase ID token');
   }
-  const email = decoded.email?.toLowerCase();
-  if (!email || !decoded.email_verified || !(await isMember(email))) throw forbidden('Members only');
+  const email = decoded.email?.trim().toLowerCase();
+  if (!email || decoded.email_verified !== true) throw forbidden('A verified email address is required');
   return {
-    actor: { type: 'user', id: decoded.uid, name: (decoded.name as string | undefined) ?? email },
+    uid: decoded.uid,
     email,
-    isOwner: email === ownerEmail(),
+    name: ((decoded.name as string | undefined) ?? '').trim() || email,
+    photoURL: (decoded.picture as string | undefined) || undefined,
+    authTime: new Date(decoded.auth_time * 1000),
+  };
+}
+
+/** `caller` as a member of `workspaceId`; 404 (so workspaces don't leak) when not a member. */
+export async function memberOf(caller: Caller, workspaceId: string): Promise<MemberCaller> {
+  const snap = await firestore().collection('workspaces').doc(workspaceId).collection('members').doc(caller.uid).get();
+  if (!snap.exists) throw notFound('Workspace not found');
+  return { ...caller, workspaceId, role: snap.get('role') as WorkspaceRole };
+}
+
+/** A Firebase ID token of a member of `workspaceId` (management routes under `/workspaces/:wid`). */
+export async function memberAuth(req: VercelRequest, workspaceId: string): Promise<MemberCaller> {
+  return memberOf(await userAuth(req), workspaceId);
+}
+
+/** 403 unless the member's role is at least `min`. */
+export function requireRole(member: MemberCaller, min: 'admin' | 'owner'): void {
+  const ok = min === 'owner' ? member.role === 'owner' : isAdminRole(member.role);
+  if (!ok) throw forbidden(min === 'owner' ? 'Only the workspace owner can do this' : 'Only workspace admins can do this');
+}
+
+/**
+ * Authenticates an API token (`Bearer fira_...`). Rejects revoked tokens, tokens without a
+ * workspace, and tokens whose creator is no longer a member of it (checked on every request).
+ * Updates `lastUsedAt` (throttled).
+ */
+export async function tokenAuth(req: VercelRequest): Promise<TokenCaller> {
+  const secret = bearer(req);
+  if (!SECRET_RE.test(secret)) throw unauthorized('Invalid API token');
+  const found = await firestore().collection('tokens').where('hash', '==', hashSecret(secret)).limit(1).get();
+  const doc = found.docs[0];
+  if (!doc || doc.get('revoked') === true) throw unauthorized('Invalid or revoked API token');
+  const workspaceId = doc.get('workspaceId') as string | undefined;
+  const userId = doc.get('userId') as string | undefined;
+  if (!workspaceId || !userId) throw unauthorized('Invalid or revoked API token');
+  const member = await firestore().collection('workspaces').doc(workspaceId).collection('members').doc(userId).get();
+  if (!member.exists) throw unauthorized("The token's creator is no longer a member of its workspace");
+
+  const lastUsedAt = doc.get('lastUsedAt') as Timestamp | undefined;
+  if (!lastUsedAt || Date.now() - lastUsedAt.toMillis() > LAST_USED_THROTTLE_MS) {
+    await doc.ref.update({ lastUsedAt: FieldValue.serverTimestamp() });
+  }
+  const viaName = (doc.get('userName') as string | undefined) ?? (member.get('name') as string | undefined) ?? 'Member';
+  return {
+    actor: { type: 'token', id: doc.id, name: doc.get('name') as string, via: { id: userId, name: viaName } },
+    workspaceId,
+    tokenId: doc.id,
+    userId,
   };
 }

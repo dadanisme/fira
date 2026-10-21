@@ -11,35 +11,46 @@ import { firestore } from './admin.js';
 import { notFound } from './http.js';
 import { fromDoc } from './serialize.js';
 
-/** Firestore access shared by the route modules. Document shapes match src/data exactly. */
+/**
+ * Firestore access shared by the route modules. Document shapes match src/data exactly. All content
+ * lives under `workspaces/{wid}`; every helper takes the workspace id (`ctx.workspaceId`) first.
+ */
 
+const wsRef = (wid: string) => firestore().collection('workspaces').doc(wid);
+
+/** Every content collection takes the workspace id first: `col.cards(wid)` = `workspaces/{wid}/cards`. */
 export const col = {
-  projects: () => firestore().collection('projects'),
-  labels: () => firestore().collection('labels'),
-  cards: () => firestore().collection('cards'),
-  pages: () => firestore().collection('pages'),
-  comments: (cardId: string) => firestore().collection('cards').doc(cardId).collection('comments'),
-  activity: (cardId: string) => firestore().collection('cards').doc(cardId).collection('activity'),
-  attachments: (cardId: string) => firestore().collection('cards').doc(cardId).collection('attachments'),
-  versions: (pageId: string) => firestore().collection('pages').doc(pageId).collection('versions'),
-  threads: (pageId: string) => firestore().collection('pages').doc(pageId).collection('threads'),
-  pageAttachments: (pageId: string) => firestore().collection('pages').doc(pageId).collection('attachments'),
+  workspaces: () => firestore().collection('workspaces'),
+  members: (wid: string) => wsRef(wid).collection('members'),
+  invites: (wid: string) => wsRef(wid).collection('invites'),
+  slugs: () => firestore().collection('slugs'),
+  tokens: () => firestore().collection('tokens'),
+  projects: (wid: string) => wsRef(wid).collection('projects'),
+  labels: (wid: string) => wsRef(wid).collection('labels'),
+  cards: (wid: string) => wsRef(wid).collection('cards'),
+  pages: (wid: string) => wsRef(wid).collection('pages'),
+  comments: (wid: string, cardId: string) => wsRef(wid).collection('cards').doc(cardId).collection('comments'),
+  activity: (wid: string, cardId: string) => wsRef(wid).collection('cards').doc(cardId).collection('activity'),
+  attachments: (wid: string, cardId: string) => wsRef(wid).collection('cards').doc(cardId).collection('attachments'),
+  versions: (wid: string, pageId: string) => wsRef(wid).collection('pages').doc(pageId).collection('versions'),
+  threads: (wid: string, pageId: string) => wsRef(wid).collection('pages').doc(pageId).collection('threads'),
+  pageAttachments: (wid: string, pageId: string) => wsRef(wid).collection('pages').doc(pageId).collection('attachments'),
 };
 
 // ---------------------------------------------------------------- projects
 
-export async function allProjects(): Promise<Project[]> {
-  return (await col.projects().get()).docs.map((d) => fromDoc<Project>(d));
+export async function allProjects(wid: string): Promise<Project[]> {
+  return (await col.projects(wid).get()).docs.map((d) => fromDoc<Project>(d));
 }
 
-export async function projectByKey(key: string): Promise<Project> {
-  const snap = await col.projects().where('key', '==', key.trim().toUpperCase()).limit(1).get();
+export async function projectByKey(wid: string, key: string): Promise<Project> {
+  const snap = await col.projects(wid).where('key', '==', key.trim().toUpperCase()).limit(1).get();
   if (snap.empty) throw notFound(`Project ${key} not found`);
   return fromDoc<Project>(snap.docs[0]);
 }
 
-export async function projectById(id: string): Promise<Project> {
-  const snap = await col.projects().doc(id).get();
+export async function projectById(wid: string, id: string): Promise<Project> {
+  const snap = await col.projects(wid).doc(id).get();
   if (!snap.exists) throw notFound(`Project ${id} not found`);
   return fromDoc<Project>(snap);
 }
@@ -59,37 +70,37 @@ export function cardJson(card: Card, project: Project, keyOf: (id: string) => st
   };
 }
 
-export async function cardRefByKey(key: string): Promise<DocumentReference> {
+export async function cardRefByKey(wid: string, key: string): Promise<DocumentReference> {
   const normalized = normalizeCardKey(key);
   if (!normalized) throw notFound(`Card ${key} not found (keys look like NI-12)`);
-  const snap = await col.cards().where('key', '==', normalized).limit(1).get();
+  const snap = await col.cards(wid).where('key', '==', normalized).limit(1).get();
   if (snap.empty) throw notFound(`Card ${normalized} not found`);
   return snap.docs[0].ref;
 }
 
-export async function cardByKey(key: string): Promise<Card> {
-  return fromDoc<Card>(await (await cardRefByKey(key)).get());
+export async function cardByKey(wid: string, key: string): Promise<Card> {
+  return fromDoc<Card>(await (await cardRefByKey(wid, key)).get());
 }
 
-export async function cardsOfProject(projectId: string): Promise<Card[]> {
-  return (await col.cards().where('projectId', '==', projectId).get()).docs.map((d) => fromDoc<Card>(d));
+export async function cardsOfProject(wid: string, projectId: string): Promise<Card[]> {
+  return (await col.cards(wid).where('projectId', '==', projectId).get()).docs.map((d) => fromDoc<Card>(d));
 }
 
 /** A card's key by id (for `parent`), looked up when not in `known`. */
-export async function keyResolver(ids: readonly (string | undefined)[], known: readonly Card[] = []) {
+export async function keyResolver(wid: string, ids: readonly (string | undefined)[], known: readonly Card[] = []) {
   const keys = new Map(known.map((c) => [c.id, c.key]));
   const missing = [...new Set(ids.filter((id): id is string => !!id && !keys.has(id)))];
   if (missing.length) {
-    const snaps = await firestore().getAll(...missing.map((id) => col.cards().doc(id)));
+    const snaps = await firestore().getAll(...missing.map((id) => col.cards(wid).doc(id)));
     for (const s of snaps) if (s.exists) keys.set(s.id, s.get('key') as string);
   }
   return (id: string) => keys.get(id);
 }
 
 /** Serializes one card (looks up its project and parent key). */
-export async function cardResponse(card: Card, project?: Project): Promise<ApiCard> {
-  const p = project ?? (await projectById(card.projectId));
-  return cardJson(card, p, await keyResolver([card.parentId]));
+export async function cardResponse(wid: string, card: Card, project?: Project): Promise<ApiCard> {
+  const p = project ?? (await projectById(wid, card.projectId));
+  return cardJson(card, p, await keyResolver(wid, [card.parentId]));
 }
 
 // ---------------------------------------------------------------- activity
@@ -99,10 +110,10 @@ interface Writer {
 }
 
 /** Adds activity entries for a card to the same batch/transaction as the change (like src/data/writes.ts). */
-export function writeActivity(w: Writer, cardId: string, drafts: readonly ActivityDraft[], actor: Actor) {
+export function writeActivity(w: Writer, wid: string, cardId: string, drafts: readonly ActivityDraft[], actor: Actor) {
   for (const draft of drafts) {
     const entry: Omit<Activity, 'id' | 'at'> & { at: FieldValue } = { ...draft, actor, at: FieldValue.serverTimestamp() };
-    w.set(col.activity(cardId).doc(), entry);
+    w.set(col.activity(wid, cardId).doc(), entry);
   }
 }
 
@@ -113,14 +124,14 @@ export function writeActivity(w: Writer, cardId: string, drafts: readonly Activi
  * spelling wins) and queues creation of missing ones with the default color, like
  * the SPA's `ensureLabel`. Returns the canonical, de-duplicated names.
  */
-export function ensureLabels(w: Writer, existing: Label[], names: readonly string[]): string[] {
+export function ensureLabels(w: Writer, wid: string, existing: Label[], names: readonly string[]): string[] {
   const out: string[] = [];
   for (const raw of names) {
     const name = raw.trim();
     if (!name) continue;
     let label = findLabel(existing, name);
     if (!label) {
-      const ref = col.labels().doc();
+      const ref = col.labels(wid).doc();
       label = { id: ref.id, name, color: colorFor(name) };
       w.set(ref, { name: label.name, color: label.color });
       existing.push(label);
@@ -136,14 +147,14 @@ export function labelsFrom(snaps: readonly DocumentSnapshot[]): Label[] {
 
 // ---------------------------------------------------------------- pages
 
-export async function pageById(id: string): Promise<Page> {
-  const snap = await col.pages().doc(id).get();
+export async function pageById(wid: string, id: string): Promise<Page> {
+  const snap = await col.pages(wid).doc(id).get();
   if (!snap.exists) throw notFound(`Page ${id} not found`);
   return fromDoc<Page>(snap);
 }
 
-export async function allPages(): Promise<Page[]> {
-  return (await col.pages().get()).docs.map((d) => fromDoc<Page>(d));
+export async function allPages(wid: string): Promise<Page[]> {
+  return (await col.pages(wid).get()).docs.map((d) => fromDoc<Page>(d));
 }
 
 /** A version snapshot document (src/data/pages.ts `snapshot`). */

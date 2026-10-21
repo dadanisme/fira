@@ -98,10 +98,10 @@ function checkParent(type: CardType, parent: Card | null, project: Project, self
   if (type === 'subtask' && parent.type !== 'card') throw unprocessable(`The parent of a subtask must be a card (${parent.key} is a ${parent.type})`);
 }
 
-async function parentByKey(key: string): Promise<Card> {
+async function parentByKey(wid: string, key: string): Promise<Card> {
   const normalized = normalizeCardKey(key);
   if (!normalized) throw unprocessable(`parent must be a card key like NI-12`);
-  const snap = await col.cards().where('key', '==', normalized).limit(1).get();
+  const snap = await col.cards(wid).where('key', '==', normalized).limit(1).get();
   if (snap.empty) throw unprocessable(`Parent card ${normalized} not found`);
   return fromDoc<Card>(snap.docs[0]);
 }
@@ -128,11 +128,11 @@ function sortCards(cards: Card[], sort: (typeof SORTS)[number], projects: Map<st
   return cards.sort((a, b) => cmp[sort](a, b) || a.projectId.localeCompare(b.projectId) || a.number - b.number);
 }
 
-async function searchCards(query: URLSearchParams) {
+async function searchCards(wid: string, query: URLSearchParams) {
   const projectKey = query.get('project');
-  const projects = projectKey ? [await projectByKey(projectKey)] : await allProjects();
+  const projects = projectKey ? [await projectByKey(wid, projectKey)] : await allProjects(wid);
   const byId = new Map(projects.map((p) => [p.id, p]));
-  const cards = projectKey ? await cardsOfProject(projects[0].id) : (await col.cards().get()).docs.map((d) => fromDoc<Card>(d));
+  const cards = projectKey ? await cardsOfProject(wid, projects[0].id) : (await col.cards(wid).get()).docs.map((d) => fromDoc<Card>(d));
 
   const statuses = queryList(query, 'status');
   if (projectKey) statuses.forEach((s) => columnFor(projects[0], s)); // 422 on unknown names
@@ -148,7 +148,7 @@ async function searchCards(query: URLSearchParams) {
   if (parentParam) {
     const key = normalizeCardKey(parentParam);
     if (!key) throw unprocessable('parent must be a card key like NI-12');
-    parentId = cards.find((c) => c.key === key)?.id ?? (await col.cards().where('key', '==', key).limit(1).get()).docs[0]?.id ?? '';
+    parentId = cards.find((c) => c.key === key)?.id ?? (await col.cards(wid).where('key', '==', key).limit(1).get()).docs[0]?.id ?? '';
   }
   const q = query.get('q')?.trim().toLowerCase();
   const archivedParam = query.get('archived');
@@ -188,6 +188,7 @@ async function searchCards(query: URLSearchParams) {
 
   const page = paginate(sortCards(matches, sortParam as (typeof SORTS)[number], byId), query);
   const keyOf = await keyResolver(
+    wid,
     page.items.map((c) => c.parentId),
     cards,
   );
@@ -198,11 +199,11 @@ async function searchCards(query: URLSearchParams) {
 
 const CREATE_KEYS = ['project', 'title', 'description', 'status', 'type', 'parent', 'priority', 'labels', 'dueDate', 'fields'];
 
-async function createCard(body: Record<string, unknown>, actor: Card['createdBy']) {
+async function createCard(wid: string, body: Record<string, unknown>, actor: Card['createdBy']) {
   onlyKeys(body, CREATE_KEYS);
   const projectKey = optString(body, 'project');
   if (!projectKey) throw badRequest('project (key) is required');
-  const project = await projectByKey(projectKey);
+  const project = await projectByKey(wid, projectKey);
   const title = reqText(body, 'title', MAX_TITLE);
   const description = optString(body, 'description') ?? '';
   const statusParam = optString(body, 'status');
@@ -210,7 +211,7 @@ async function createCard(body: Record<string, unknown>, actor: Card['createdBy'
   if (!column) throw unprocessable(`Project ${project.key} has no columns`);
   const type = optEnum(body, 'type', CARD_TYPES) ?? 'card';
   const parentKey = optNullableString(body, 'parent');
-  const parent = parentKey ? await parentByKey(parentKey) : null;
+  const parent = parentKey ? await parentByKey(wid, parentKey) : null;
   checkParent(type, parent, project);
   const priority = optEnum(body, 'priority', PRIORITIES) ?? 'none';
   const labelNames = optStringArray(body, 'labels') ?? [];
@@ -218,20 +219,20 @@ async function createCard(body: Record<string, unknown>, actor: Card['createdBy'
   const fieldsInput = optObject(body, 'fields');
   const fields = (fieldsInput ? coerceFields(project, fieldsInput, false) : {}) as Record<string, FieldValue>;
 
-  const ref = col.cards().doc();
-  const projectRef = col.projects().doc(project.id);
+  const ref = col.cards(wid).doc();
+  const projectRef = col.projects(wid).doc(project.id);
 
   await firestore().runTransaction(async (tx) => {
     const snap = await tx.get(projectRef);
     if (!snap.exists) throw notFound(`Project ${project.key} not found`);
-    const existingLabels = labelsFrom((await tx.get(col.labels())).docs);
+    const existingLabels = labelsFrom((await tx.get(col.labels(wid))).docs);
     // Read after the project lock, so concurrent creates in the same column get distinct ranks.
-    const siblings = (await tx.get(col.cards().where('projectId', '==', project.id))).docs
+    const siblings = (await tx.get(col.cards(wid).where('projectId', '==', project.id))).docs
       .map((d) => fromDoc<Card>(d))
       .filter((c) => c.status === column.id);
     const rank = rankAfterLast(siblings);
     const number = snap.get('nextNumber') as number;
-    const labels = ensureLabels(tx, existingLabels, labelNames);
+    const labels = ensureLabels(tx, wid, existingLabels, labelNames);
     const card: Omit<Card, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Fv; updatedAt: Fv } = {
       projectId: project.id,
       key: formatCardKey(project.key, number),
@@ -255,9 +256,9 @@ async function createCard(body: Record<string, unknown>, actor: Card['createdBy'
     };
     tx.set(ref, card);
     tx.update(projectRef, { nextNumber: number + 1 });
-    writeActivity(tx, ref.id, [{ kind: 'created' }], actor);
+    writeActivity(tx, wid, ref.id, [{ kind: 'created' }], actor);
   });
-  return created(await cardResponse(fromDoc<Card>(await ref.get()), project));
+  return created(await cardResponse(wid, fromDoc<Card>(await ref.get()), project));
 }
 
 // ---------------------------------------------------------------- update
@@ -277,11 +278,11 @@ const PATCH_KEYS = [
   'descriptionVersion',
 ];
 
-async function patchCard(key: string, body: Record<string, unknown>, actor: Card['updatedBy']) {
+async function patchCard(wid: string, key: string, body: Record<string, unknown>, actor: Card['updatedBy']) {
   onlyKeys(body, PATCH_KEYS);
-  const ref = await cardRefByKey(key);
+  const ref = await cardRefByKey(wid, key);
   const before = fromDoc<Card>(await ref.get());
-  const project = await projectById(before.projectId);
+  const project = await projectById(wid, before.projectId);
 
   const title = optText(body, 'title', MAX_TITLE);
   const statusParam = optString(body, 'status');
@@ -291,7 +292,7 @@ async function patchCard(key: string, body: Record<string, unknown>, actor: Card
   const parentKey = optNullableString(body, 'parent');
   let parent: Card | null | undefined;
   if (parentKey !== undefined) {
-    parent = parentKey === null ? null : await parentByKey(parentKey);
+    parent = parentKey === null ? null : await parentByKey(wid, parentKey);
     checkParent(before.type, parent, project, before.id);
   }
   const fieldsInput = optObject(body, 'fields');
@@ -309,14 +310,14 @@ async function patchCard(key: string, body: Record<string, unknown>, actor: Card
   // A status change appends the card to the end of the target column.
   const rank =
     column && column.id !== before.status
-      ? rankAfterLast((await cardsOfProject(project.id)).filter((c) => c.status === column.id && c.id !== before.id))
+      ? rankAfterLast((await cardsOfProject(wid, project.id)).filter((c) => c.status === column.id && c.id !== before.id))
       : undefined;
-  const keyOf = await keyResolver([before.parentId]);
+  const keyOf = await keyResolver(wid, [before.parentId]);
 
   const result = await firestore().runTransaction(async (tx): Promise<{ conflict?: Card; card: Card | null }> => {
     const card = fromDoc<Card>(await tx.get(ref));
     const touchesLabels = labels !== undefined || addLabels !== undefined || removeLabels !== undefined;
-    const existingLabels = touchesLabels ? labelsFrom((await tx.get(col.labels())).docs) : [];
+    const existingLabels = touchesLabels ? labelsFrom((await tx.get(col.labels(wid))).docs) : [];
     if (description !== undefined && descriptionVersion !== card.descriptionVersion) return { conflict: card, card: null };
 
     const patch: CardPatch = {};
@@ -336,7 +337,7 @@ async function patchCard(key: string, body: Record<string, unknown>, actor: Card
       if (removeLabels) next = next.filter((l) => !removeLabels.some((r) => sameLabel(l, r)));
       // Keep the card's own spelling for labels it already has; canonicalize/create the rest.
       const kept = next.map((l) => card.labels.find((cl) => sameLabel(cl, l)) ?? findLabel(existingLabels, l)?.name ?? l);
-      patch.labels = ensureLabels(tx, existingLabels, kept);
+      patch.labels = ensureLabels(tx, wid, existingLabels, kept);
     }
 
     const drafts = cardPatchActivity(card, patch, {
@@ -359,27 +360,29 @@ async function patchCard(key: string, body: Record<string, unknown>, actor: Card
       data.descriptionVersion = card.descriptionVersion + 1;
     }
     tx.update(ref, data);
-    writeActivity(tx, card.id, drafts, actor);
+    writeActivity(tx, wid, card.id, drafts, actor);
     return { card: null };
   });
 
   if (result.conflict) {
     throw versionConflict(
       `Description is at version ${result.conflict.descriptionVersion}; your edit is based on ${descriptionVersion}`,
-      await cardResponse(result.conflict, project),
+      await cardResponse(wid, result.conflict, project),
     );
   }
-  return cardResponse(result.card ?? fromDoc<Card>(await ref.get()), project);
+  return cardResponse(wid, result.card ?? fromDoc<Card>(await ref.get()), project);
 }
 
 // ---------------------------------------------------------------- routes
 
 export const cardRoutes = [
-  route('GET', '/cards', 'token', async ({ query }) => searchCards(query)),
-  route('POST', '/cards', 'token', async ({ req, actor }) => createCard(jsonBody(req), actor)),
-  route('GET', '/cards/:key', 'token', async ({ params }) => {
-    const ref = await cardRefByKey(params.key);
-    return cardResponse(fromDoc<Card>(await ref.get()));
+  route('GET', '/cards', 'token', async ({ query, workspaceId }) => searchCards(workspaceId, query)),
+  route('POST', '/cards', 'token', async ({ req, actor, workspaceId }) => createCard(workspaceId, jsonBody(req), actor)),
+  route('GET', '/cards/:key', 'token', async ({ params, workspaceId }) => {
+    const ref = await cardRefByKey(workspaceId, params.key);
+    return cardResponse(workspaceId, fromDoc<Card>(await ref.get()));
   }),
-  route('PATCH', '/cards/:key', 'token', async ({ req, params, actor }) => patchCard(params.key, jsonBody(req), actor)),
+  route('PATCH', '/cards/:key', 'token', async ({ req, params, actor, workspaceId }) =>
+    patchCard(workspaceId, params.key, jsonBody(req), actor),
+  ),
 ];

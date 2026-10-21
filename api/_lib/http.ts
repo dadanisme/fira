@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiErrorCode } from '../../shared/api.js';
 
 /** An error with an HTTP status, sent as `{ error: { code, message } }`. */
 export class HttpError extends Error {
@@ -22,6 +23,9 @@ export const notFound = (message = 'Not found') => new HttpError(404, 'not_found
 export const conflict = (message: string) => new HttpError(409, 'conflict', message);
 export const unprocessable = (message: string, details?: Record<string, unknown>) =>
   new HttpError(422, 'unprocessable', message, details);
+/** An error with one of the specific codes of shared/api.ts (`slug_taken`, `seat_limit`, ...). */
+export const coded = (status: number, code: ApiErrorCode, message: string) => new HttpError(status, code, message);
+export const tooManyRequests = (message: string) => new HttpError(429, 'too_many_requests', message);
 /** 409 for a stale `version` / `descriptionVersion`; `current` is the resource as it is now. */
 export const versionConflict = (message: string, current: unknown) =>
   new HttpError(409, 'version_conflict', message, { current });

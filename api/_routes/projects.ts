@@ -6,15 +6,15 @@ import { fromDoc } from '../_lib/serialize.js';
 import { allProjects, col, projectByKey } from '../_lib/store.js';
 
 export const projectRoutes = [
-  route('GET', '/projects', 'token', async ({ query }) => {
-    const projects = (await allProjects()).sort(byRank);
+  route('GET', '/projects', 'token', async ({ query, workspaceId }) => {
+    const projects = (await allProjects(workspaceId)).sort(byRank);
     return paginate(projects, query);
   }),
 
-  route('GET', '/projects/:key', 'token', async ({ params }) => projectByKey(params.key)),
+  route('GET', '/projects/:key', 'token', async ({ params, workspaceId }) => projectByKey(workspaceId, params.key)),
 
-  route('GET', '/labels', 'token', async ({ query }) => {
-    const labels = (await col.labels().get()).docs.map((d) => fromDoc<Label>(d));
+  route('GET', '/labels', 'token', async ({ query, workspaceId }) => {
+    const labels = (await col.labels(workspaceId).get()).docs.map((d) => fromDoc<Label>(d));
     return paginate(
       labels.sort((a, b) => a.name.localeCompare(b.name)),
       query,

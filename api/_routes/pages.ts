@@ -44,8 +44,8 @@ function reqBody(body: Record<string, unknown>): string {
   return text;
 }
 
-async function livePage(id: string, what: string): Promise<Page> {
-  const snap = await col.pages().doc(id).get();
+async function livePage(wid: string, id: string, what: string): Promise<Page> {
+  const snap = await col.pages(wid).doc(id).get();
   if (!snap.exists) throw unprocessable(`${what} page ${id} not found`);
   const page = fromDoc<Page>(snap);
   if (page.trashed) throw unprocessable(`${what} page ${id} is in the trash`);
@@ -54,12 +54,12 @@ async function livePage(id: string, what: string): Promise<Page> {
 
 // ---------------------------------------------------------------- pages
 
-async function listPages(query: URLSearchParams) {
+async function listPages(wid: string, query: URLSearchParams) {
   const parent = query.get('parent');
   const template = queryBool(query, 'template', undefined);
   const trashed = queryBool(query, 'trashed', false);
   const q = query.get('q')?.trim().toLowerCase();
-  const pages = (await allPages()).filter(
+  const pages = (await allPages(wid)).filter(
     (p) =>
       p.trashed === trashed &&
       (template === undefined || p.isTemplate === template) &&
@@ -72,20 +72,20 @@ async function listPages(query: URLSearchParams) {
   );
 }
 
-async function createPage(body: Record<string, unknown>, actor: Actor) {
+async function createPage(wid: string, body: Record<string, unknown>, actor: Actor) {
   onlyKeys(body, ['title', 'parent', 'content', 'template', 'isTemplate', 'icon']);
   const templateId = optString(body, 'template');
-  const template = templateId ? await livePage(templateId, 'Template') : undefined;
+  const template = templateId ? await livePage(wid, templateId, 'Template') : undefined;
   const title = optTitle(body) ?? template?.title;
   if (title === undefined) throw badRequest('title is required (or pass template to copy its title)');
   const parentId = optNullableString(body, 'parent') ?? null;
-  if (parentId) await livePage(parentId, 'Parent');
+  if (parentId) await livePage(wid, parentId, 'Parent');
   const content = optString(body, 'content') ?? template?.content ?? '';
   const icon = optIcon(body) ?? template?.icon;
   const isTemplate = optBoolean(body, 'isTemplate') ?? false;
 
-  const siblings = (await col.pages().where('parentId', '==', parentId).get()).docs.map((d) => fromDoc<Page>(d));
-  const ref = col.pages().doc();
+  const siblings = (await col.pages(wid).where('parentId', '==', parentId).get()).docs.map((d) => fromDoc<Page>(d));
+  const ref = col.pages(wid).doc();
   const batch = firestore().batch();
   batch.set(ref, {
     title,
@@ -100,12 +100,12 @@ async function createPage(body: Record<string, unknown>, actor: Actor) {
     updatedAt: Fv.serverTimestamp(),
     updatedBy: actor,
   });
-  batch.set(col.versions(ref.id).doc(), versionDoc(1, title, content, actor));
+  batch.set(col.versions(wid, ref.id).doc(), versionDoc(1, title, content, actor));
   await batch.commit();
   return created(fromDoc<Page>(await ref.get()));
 }
 
-async function patchPage(id: string, body: Record<string, unknown>, actor: Actor) {
+async function patchPage(wid: string, id: string, body: Record<string, unknown>, actor: Actor) {
   onlyKeys(body, ['title', 'content', 'parent', 'icon', 'trashed', 'isTemplate', 'version']);
   const title = optTitle(body);
   const content = optString(body, 'content');
@@ -116,13 +116,13 @@ async function patchPage(id: string, body: Record<string, unknown>, actor: Actor
   const version = optInteger(body, 'version');
   const saves = title !== undefined || content !== undefined;
   if (saves && version === undefined) throw badRequest('version is required with title/content (the version your edit is based on)');
-  const ref = col.pages().doc(id);
+  const ref = col.pages(wid).doc(id);
 
   const conflictWith = await firestore().runTransaction(async (tx): Promise<Page | null> => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw notFound(`Page ${id} not found`);
     const page = fromDoc<Page>(snap);
-    const pages = parent !== undefined || trashed !== undefined ? (await tx.get(col.pages())).docs.map((d) => fromDoc<Page>(d)) : [];
+    const pages = parent !== undefined || trashed !== undefined ? (await tx.get(col.pages(wid))).docs.map((d) => fromDoc<Page>(d)) : [];
     if (saves && version !== page.version) return page;
 
     const updates = new Map<string, DocumentData>();
@@ -154,9 +154,9 @@ async function patchPage(id: string, body: Record<string, unknown>, actor: Actor
       const nextTitle = title ?? page.title;
       const nextContent = content ?? page.content;
       update(page.id, { title: nextTitle, content: nextContent, version: next, updatedAt: Fv.serverTimestamp(), updatedBy: actor });
-      tx.set(col.versions(page.id).doc(), versionDoc(next, nextTitle, nextContent, actor));
+      tx.set(col.versions(wid, page.id).doc(), versionDoc(next, nextTitle, nextContent, actor));
     }
-    for (const [pid, data] of updates) tx.update(col.pages().doc(pid), data);
+    for (const [pid, data] of updates) tx.update(col.pages(wid).doc(pid), data);
     return null;
   });
 
@@ -173,39 +173,41 @@ function message(body: string, author: Actor) {
   return { id: randomId(), body, author, createdAt: Timestamp.now() };
 }
 
-async function threadRef(pageId: string, threadId: string) {
-  await pageById(pageId);
-  const ref = col.threads(pageId).doc(threadId);
+async function threadRef(wid: string, pageId: string, threadId: string) {
+  await pageById(wid, pageId);
+  const ref = col.threads(wid, pageId).doc(threadId);
   if (!(await ref.get()).exists) throw notFound(`Thread ${threadId} not found on page ${pageId}`);
   return ref;
 }
 
 export const pageRoutes = [
-  route('GET', '/pages', 'token', async ({ query }) => listPages(query)),
-  route('POST', '/pages', 'token', async ({ req, actor }) => createPage(jsonBody(req), actor)),
-  route('GET', '/pages/:id', 'token', async ({ params }) => pageById(params.id)),
-  route('PATCH', '/pages/:id', 'token', async ({ req, params, actor }) => patchPage(params.id, jsonBody(req), actor)),
+  route('GET', '/pages', 'token', async ({ query, workspaceId }) => listPages(workspaceId, query)),
+  route('POST', '/pages', 'token', async ({ req, actor, workspaceId }) => createPage(workspaceId, jsonBody(req), actor)),
+  route('GET', '/pages/:id', 'token', async ({ params, workspaceId }) => pageById(workspaceId, params.id)),
+  route('PATCH', '/pages/:id', 'token', async ({ req, params, actor, workspaceId }) =>
+    patchPage(workspaceId, params.id, jsonBody(req), actor),
+  ),
 
-  route('GET', '/pages/:id/versions', 'token', async ({ params, query }) => {
-    await pageById(params.id);
-    const snap = await col.versions(params.id).orderBy('savedAt', 'desc').get();
+  route('GET', '/pages/:id/versions', 'token', async ({ params, query, workspaceId: wid }) => {
+    await pageById(wid, params.id);
+    const snap = await col.versions(wid, params.id).orderBy('savedAt', 'desc').get();
     return paginate(
       snap.docs.map((d) => fromDoc<PageVersion>(d)),
       query,
     );
   }),
 
-  route('GET', '/pages/:id/threads', 'token', async ({ params, query }) => {
-    await pageById(params.id);
+  route('GET', '/pages/:id/threads', 'token', async ({ params, query, workspaceId: wid }) => {
+    await pageById(wid, params.id);
     const resolved = query.get('resolved') === 'all' ? undefined : queryBool(query, 'resolved', false);
-    const threads = (await col.threads(params.id).get()).docs
+    const threads = (await col.threads(wid, params.id).get()).docs
       .map((d) => fromDoc<Thread>(d))
       .filter((t) => resolved === undefined || t.resolved === resolved)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
     return paginate(threads, query);
   }),
 
-  route('POST', '/pages/:id/threads', 'token', async ({ req, params, actor }) => {
+  route('POST', '/pages/:id/threads', 'token', async ({ req, params, actor, workspaceId: wid }) => {
     const body = jsonBody(req);
     onlyKeys(body, ['quote', 'prefix', 'suffix', 'body']);
     const quote = optString(body, 'quote');
@@ -213,8 +215,8 @@ export const pageRoutes = [
     const prefix = optString(body, 'prefix') ?? '';
     const suffix = optString(body, 'suffix') ?? '';
     const text = reqBody(body);
-    await pageById(params.id);
-    const ref = col.threads(params.id).doc();
+    await pageById(wid, params.id);
+    const ref = col.threads(wid, params.id).doc();
     await ref.set({
       quote,
       prefix: prefix.slice(-32),
@@ -226,21 +228,21 @@ export const pageRoutes = [
     return created(fromDoc<Thread>(await ref.get()));
   }),
 
-  route('POST', '/pages/:id/threads/:tid/messages', 'token', async ({ req, params, actor }) => {
+  route('POST', '/pages/:id/threads/:tid/messages', 'token', async ({ req, params, actor, workspaceId: wid }) => {
     const body = jsonBody(req);
     onlyKeys(body, ['body']);
     const text = reqBody(body);
-    const ref = await threadRef(params.id, params.tid);
+    const ref = await threadRef(wid, params.id, params.tid);
     await ref.update({ messages: Fv.arrayUnion(message(text, actor)) });
     return created(fromDoc<Thread>(await ref.get()));
   }),
 
-  route('PATCH', '/pages/:id/threads/:tid', 'token', async ({ req, params }) => {
+  route('PATCH', '/pages/:id/threads/:tid', 'token', async ({ req, params, workspaceId: wid }) => {
     const body = jsonBody(req);
     onlyKeys(body, ['resolved']);
     const resolved = optBoolean(body, 'resolved');
     if (resolved === undefined) throw badRequest('resolved (boolean) is required');
-    const ref = await threadRef(params.id, params.tid);
+    const ref = await threadRef(wid, params.id, params.tid);
     await ref.update({ resolved, resolvedAt: resolved ? Fv.serverTimestamp() : Fv.delete() });
     return fromDoc<Thread>(await ref.get());
   }),

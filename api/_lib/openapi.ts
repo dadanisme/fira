@@ -1,4 +1,5 @@
-import { ACTIVITY_KINDS, CARD_TYPES, FIELD_TYPES, LABEL_COLORS, PRIORITIES } from '../../shared/types.js';
+import { ACTIVITY_KINDS, CARD_TYPES, FIELD_TYPES, INVITE_ROLES, LABEL_COLORS, PRIORITIES, WORKSPACE_ROLES } from '../../shared/types.js';
+import { LIMITS, WORKSPACE_SLUG_RE } from '../../shared/workspaces.js';
 
 /**
  * Hand-written OpenAPI 3.1 description of the REST API, served at
@@ -10,6 +11,7 @@ import { ACTIVITY_KINDS, CARD_TYPES, FIELD_TYPES, LABEL_COLORS, PRIORITIES } fro
 const SITE = 'https://fira-six.vercel.app';
 const BASE = `${SITE}/api/v1`;
 const DOCS = `${SITE}/docs/api`;
+const WID = 'Ws3Kq8Lm1Vx6Rt9Hn2Zc';
 
 // ---------------------------------------------------------------- helpers
 
@@ -34,7 +36,16 @@ const pageOf = (item: string) => ({
   },
 });
 const list = (items: unknown[], nextCursor: string | null = null) => ({ items, nextCursor });
-const RESPONSES = { 400: 'BadRequest', 401: 'Unauthorized', 403: 'Forbidden', 404: 'NotFound', 409: 'Conflict', 413: 'TooLarge', 422: 'Unprocessable' };
+const RESPONSES = {
+  400: 'BadRequest',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'NotFound',
+  409: 'Conflict',
+  413: 'TooLarge',
+  422: 'Unprocessable',
+  429: 'TooManyRequests',
+};
 const errors = (...codes: (keyof typeof RESPONSES)[]) =>
   Object.fromEntries(codes.map((c) => [String(c), { $ref: `#/components/responses/${RESPONSES[c]}` }]));
 const param = (name: string) => ({ $ref: `#/components/parameters/${name}` });
@@ -180,10 +191,10 @@ const attachmentExample = {
   name: 'thumbnail-draft.png',
   size: 482113,
   contentType: 'image/png',
-  storagePath: `attachments/${cardExample.id}/At7Kp3Lx9Hq2Vm6Rz1Nw/thumbnail-draft.png`,
+  storagePath: `workspaces/${WID}/cards/${cardExample.id}/At7Kp3Lx9Hq2Vm6Rz1Nw/thumbnail-draft.png`,
   uploadedBy: agent,
   createdAt: '2026-10-19T08:35:40.000Z',
-  url: 'https://storage.googleapis.com/fira-app.appspot.com/attachments/Cd4Hq8Lm2Rz6Wx0Kp3Ty/At7Kp3Lx9Hq2Vm6Rz1Nw/thumbnail-draft.png?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Expires=3600&X-Goog-Signature=5f2c9a',
+  url: `https://storage.googleapis.com/fira-app.appspot.com/workspaces/${WID}/cards/Cd4Hq8Lm2Rz6Wx0Kp3Ty/At7Kp3Lx9Hq2Vm6Rz1Nw/thumbnail-draft.png?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Expires=3600&X-Goog-Signature=5f2c9a`,
   urlExpiresAt: '2026-10-19T09:35:40.000Z',
 };
 const pageAttachmentExample = {
@@ -191,8 +202,8 @@ const pageAttachmentExample = {
   name: 'slide-01-v2.png',
   size: 1243871,
   contentType: 'image/png',
-  storagePath: `pages/${pageExample.id}/Pa4Hx8Lq2Vn6Rt0Kz3Mw/slide-01-v2.png`,
-  url: `https://firebasestorage.googleapis.com/v0/b/fira-app.appspot.com/o/pages%2F${pageExample.id}%2FPa4Hx8Lq2Vn6Rt0Kz3Mw%2Fslide-01-v2.png?alt=media&token=3f6c2b1e-8d4a-4c7e-9b2f-5a1d0e7c4b93`,
+  storagePath: `workspaces/${WID}/pages/${pageExample.id}/Pa4Hx8Lq2Vn6Rt0Kz3Mw/slide-01-v2.png`,
+  url: `https://firebasestorage.googleapis.com/v0/b/fira-app.appspot.com/o/workspaces%2F${WID}%2Fpages%2F${pageExample.id}%2FPa4Hx8Lq2Vn6Rt0Kz3Mw%2Fslide-01-v2.png?alt=media&token=3f6c2b1e-8d4a-4c7e-9b2f-5a1d0e7c4b93`,
   uploadedBy: agent,
   createdAt: '2026-10-19T09:05:31.000Z',
 };
@@ -210,6 +221,7 @@ const labelExamples = [
 ];
 const tokenExample = {
   id: agent.id,
+  workspaceId: WID,
   name: 'agen',
   color: 'blue',
   prefix: 'fira_a1b',
@@ -220,6 +232,39 @@ const tokenExample = {
   userId: agent.via.id,
   userName: agent.via.name,
 };
+const workspaceExample = {
+  id: WID,
+  name: 'Ramdan',
+  slug: 'ramdan',
+  ownerUid: owner.id,
+  createdAt: '2026-09-01T07:00:00.000Z',
+  createdBy: owner.id,
+};
+const memberExample = {
+  id: 'Uq7Hd2Lx9Rm4Vk1Zs8Pn3Tw6Bc5',
+  uid: 'Uq7Hd2Lx9Rm4Vk1Zs8Pn3Tw6Bc5',
+  email: 'alice@example.com',
+  name: 'Alice',
+  photoURL: 'https://lh3.googleusercontent.com/a/alice',
+  role: 'member',
+  joinedAt: '2026-10-05T10:20:00.000Z',
+  invitedBy: owner.id,
+  lastSignInAt: '2026-10-19T07:58:00.000Z',
+  workspaceName: workspaceExample.name,
+  workspaceSlug: workspaceExample.slug,
+};
+const inviteExample = {
+  id: 'bob@example.com',
+  email: 'bob@example.com',
+  role: 'member',
+  invitedBy: { uid: owner.id, name: 'Owner', email: 'owner@example.com' },
+  createdAt: '2026-10-19T09:30:00.000Z',
+  lastSentAt: '2026-10-19T09:30:00.000Z',
+  emailStatus: 'sent',
+  workspaceId: WID,
+  workspaceName: workspaceExample.name,
+};
+const meExample = { ...agent, workspace: { id: WID, name: workspaceExample.name, slug: workspaceExample.slug } };
 const errorExample = (code: string, message: string, extra: Record<string, unknown> = {}) => ({ error: { code, message, ...extra } });
 
 // ---------------------------------------------------------------- getting started guide (info.description)
@@ -233,7 +278,9 @@ This REST API lets automation agents do what the app does — search and move ca
 
 ### 1. Create a token
 
-In fira, open **Settings → API tokens** ([${SITE}/settings/tokens](${SITE}/settings/tokens)), name a token after the agent that will use it (for example \`agen\`) and copy the secret. It looks like \`fira_\` followed by 32 letters and digits and is **shown only once** (fira stores only its hash). Revoking a token there takes effect immediately.
+In fira, open the workspace the agent should work in, then **Settings → API tokens** (\`${SITE}/w/<workspace>/settings/tokens\`), name a token after the agent that will use it (for example \`agen\`) and copy the secret. It looks like \`fira_\` followed by 32 letters and digits and is **shown only once** (fira stores only its hash). Revoking a token there takes effect immediately.
+
+**A token belongs to one workspace.** Every content endpoint (cards, pages, projects, labels) works inside the token's workspace, so paths carry no workspace: \`GET /cards/NI-42\` is NI-42 of that workspace, and anything in another workspace is a 404. To work in several workspaces, use one token per workspace. \`GET /me\` tells you which workspace a token is for.
 
 ### 2. Make a request
 
@@ -242,7 +289,8 @@ Base URL: \`${BASE}\`. Send the token as a bearer token with every request:
 \`\`\`bash
 export FIRA_TOKEN=fira_...
 curl ${BASE}/me -H "Authorization: Bearer $FIRA_TOKEN"
-# {"type":"token","id":"Tk8Qm2Vx4LpZr7Ws1Hn3","name":"agen","via":{"id":"Gk2v9XcR1sYhQ7mN3pLw8ZtB4a62","name":"Owner"}}
+# {"type":"token","id":"Tk8Qm2Vx4LpZr7Ws1Hn3","name":"agen","via":{"id":"Gk2v9XcR1sYhQ7mN3pLw8ZtB4a62","name":"Owner"},
+#  "workspace":{"id":"${WID}","name":"Ramdan","slug":"ramdan"}}
 \`\`\`
 
 Bodies are JSON (\`Content-Type: application/json\`), except attachment uploads (\`multipart/form-data\`). Timestamps are ISO 8601 strings in UTC, dates are \`YYYY-MM-DD\`, and card descriptions, comments and pages are Markdown.
@@ -266,14 +314,17 @@ Every error has the same shape: a machine-readable \`code\` and a \`message\` wr
 | Status | \`code\` | When |
 | --- | --- | --- |
 | 400 | \`bad_request\` | Malformed request: invalid JSON, wrong JSON types, **unknown body fields** (a typo such as \`label\` for \`labels\` is rejected, not ignored), missing required fields, bad \`limit\`/\`cursor\`/\`sort\` |
-| 401 | \`unauthorized\` | Missing \`Authorization\` header, malformed or revoked token, or its creator is no longer a member |
-| 403 | \`forbidden\` | Token management by a Google account that isn't a member |
-| 404 | \`not_found\` | Unknown card key, project, page, thread or attachment; unknown route |
+| 401 | \`unauthorized\` | Missing \`Authorization\` header, malformed or revoked token, or its creator is no longer a member of the token's workspace |
+| 403 | \`forbidden\` | Workspace management without the required role (admin or owner), or by an account without a verified email |
+| 404 | \`not_found\` | Unknown card key, project, page, thread or attachment (in the token's workspace); a workspace you aren't a member of; unknown route |
 | 405 | \`method_not_allowed\` | The path exists, but not with this method (see the \`Allow\` header) |
 | 409 | \`version_conflict\` | A versioned write based on a stale version (see below) |
 | 409 | \`conflict\` | The card already has a work page |
+| 409 | \`slug_taken\`, \`already_member\`, \`already_invited\` | Workspace management: the slug is used by another workspace; the email is already a member or invited |
 | 413 | \`payload_too_large\` | Attachment over 4 MB |
 | 422 | \`unprocessable\` | Well-formed but invalid: unknown status or field, value not allowed by a field, broken epic/card/subtask hierarchy, empty title or comment |
+| 422 | \`workspace_limit\`, \`seat_limit\` | A user owns at most 3 workspaces; a workspace has at most 50 seats (members + pending invites) |
+| 429 | \`too_many_requests\` | An invite email was resent less than a minute ago |
 | 500 | \`internal\` | A bug on fira's side |
 
 ## Pagination
@@ -296,7 +347,7 @@ done
 - **Cards are addressed by key** — \`NI-42\` — in paths, in \`parent\` and in filters. Keys are case-insensitive (\`ni-42\` works). Responses also carry internal ids (\`id\`, \`parentId\`, \`statusId\`), which you never need to send.
 - **Statuses are the columns of the card's project** and are accepted **by column name** (case-insensitive, so \`"script review"\` works) or by column id. Card responses include both \`status\` (the name) and \`statusId\`. An unknown status is a 422 that lists \`validStatuses\`. \`GET /projects/NI\` returns the columns in board order; the last one is the "done" column.
 - **Custom fields** live in \`fields\`, keyed by the field's \`key\` (for example \`ideaSource\`), and are validated against the project's field definitions: select values must be one of the options (matched case-insensitively), numbers accept numeric strings, checkboxes \`true\`/\`false\`, dates \`YYYY-MM-DD\`, urls absolute http(s). Filter by them with \`field.ideaSource=Trend\`.
-- **Labels** are global and referenced by name; unknown names are created on the fly.
+- **Labels** belong to the workspace (shared by its projects) and are referenced by name; unknown names are created on the fly.
 - **Hierarchy**: an epic has no parent, a card's parent is an epic, a subtask's parent is a card, all in the same project.
 
 \`\`\`bash
@@ -360,9 +411,11 @@ Every write is attributed to an **actor** \`{ type, id, name, via? }\`: \`token\
 
 Every card change writes entries to the card's activity timeline (\`GET /cards/{key}/activity\`), exactly like the app does; status entries record column names. Every page title/content save through the API writes a version snapshot (\`GET /pages/{id}/versions\`).
 
-## Token management
+## Workspaces, members and tokens
 
-The \`/tokens\` endpoints back **Settings → API tokens** and require a member's Firebase ID token, not an API token: agents cannot create or revoke tokens. Each member creates and revokes their own tokens; the owner sees and can revoke everyone's. A token stops working (401) as soon as its creator is removed from the workspace.
+The \`/workspaces\` and \`/account\` endpoints back the app's workspace screens (create, rename, transfer, delete, members, invites, API tokens). They take a signed-in user's **Firebase ID token**, not an API token, so agents cannot manage workspaces, members or tokens. Under \`/workspaces/{wid}/...\` the caller must be a member of that workspace (else 404) with the role the endpoint needs: admins and the owner invite, change roles and remove members below the owner; only the owner renames, transfers or deletes the workspace.
+
+API tokens are created per workspace: each member creates and revokes their own; admins and the owner see and can revoke all of the workspace's tokens. A token stops working (401) as soon as its creator leaves or is removed from its workspace (its tokens there are also marked revoked), and when the workspace is deleted.
 `.trim();
 
 // ---------------------------------------------------------------- the document
@@ -396,14 +449,25 @@ export const openapi = {
         'Docs: one tree of Markdown pages, including templates and the trash. Title/content saves are versioned and snapshotted. Page attachments are files (≤ 4 MB) with permanent URLs for embedding images in page Markdown.',
     },
     { name: 'Threads', description: 'Inline comment threads anchored to a quote in a page, with replies and resolve/reopen.' },
-    { name: 'Projects & labels', description: 'Read-only project configuration (columns, custom fields) and the global label list.' },
-    { name: 'Tokens', description: "API token management, used by Settings → API tokens. Requires a member's Firebase ID token." },
+    { name: 'Projects & labels', description: "Read-only project configuration (columns, custom fields) and the workspace's label list." },
+    {
+      name: 'Workspaces',
+      description: "Create, rename, transfer and delete workspaces (used by the app). Requires a signed-in user's Firebase ID token; the routes under `/workspaces/{wid}` require membership (else 404).",
+    },
+    { name: 'Members', description: "Change a member's role, remove a member, or leave a workspace. Firebase ID token." },
+    {
+      name: 'Invites',
+      description: 'Invite people by email (sends an email; a failed send keeps the invite with `emailStatus: failed`), resend, revoke, and accept or decline as the invitee. Firebase ID token.',
+    },
+    { name: 'Account', description: 'Profile sync of the signed-in user. Firebase ID token.' },
+    { name: 'Tokens', description: "API tokens of one workspace, used by Settings → API tokens. Requires a member's Firebase ID token." },
     { name: 'Meta', description: 'The calling actor and this OpenAPI document.' },
   ],
   'x-tagGroups': [
     { name: 'Board', tags: ['Cards', 'Comments', 'Activity', 'Attachments', 'Projects & labels'] },
     { name: 'Docs', tags: ['Pages', 'Threads'] },
-    { name: 'Account', tags: ['Tokens', 'Meta'] },
+    { name: 'Workspaces', tags: ['Workspaces', 'Members', 'Invites', 'Tokens', 'Account'] },
+    { name: 'Meta', tags: ['Meta'] },
   ],
   paths: {
     // ------------------------------------------------------------ cards
@@ -992,28 +1056,198 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Projects & labels'],
         operationId: 'listLabels',
         summary: 'List labels',
-        description: 'The global labels, by name. Cards reference labels by name; creating or updating a card with a new name creates the label.',
+        description: "The workspace's labels, by name. Cards reference labels by name; creating or updating a card with a new name creates the label.",
         parameters: [param('limit'), param('cursor')],
         responses: { 200: ok('A page of labels', pageOf('Label'), list(labelExamples)), ...errors(400, 401) },
       },
     },
 
+    // ------------------------------------------------------------ workspaces
+    '/workspaces': {
+      post: {
+        tags: ['Workspaces'],
+        operationId: 'createWorkspace',
+        summary: 'Create a workspace',
+        description: `Creates a workspace owned by the caller, who becomes its \`owner\` member. A user owns at most ${LIMITS.ownedWorkspaces} workspaces (422 \`workspace_limit\`). The slug must be free (409 \`slug_taken\`) and valid: 3–32 lowercase letters, digits and single hyphens, starting with a letter; some words are reserved.`,
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body(
+          {
+            type: 'object',
+            required: ['name', 'slug'],
+            properties: {
+              name: { type: 'string', minLength: 1, maxLength: LIMITS.workspaceName },
+              slug: { type: 'string', pattern: WORKSPACE_SLUG_RE.source },
+            },
+          },
+          { name: 'Ramdan', slug: 'ramdan' },
+        ),
+        responses: {
+          201: ok('The new workspace', ref('Workspace'), workspaceExample),
+          409: { description: '`slug_taken`', content: json(ref('Error'), errorExample('slug_taken', 'The slug "ramdan" is taken')) },
+          ...errors(400, 401, 403, 422),
+        },
+      },
+    },
+    '/workspaces/{wid}': {
+      parameters: [param('workspaceId')],
+      patch: {
+        tags: ['Workspaces'],
+        operationId: 'updateWorkspace',
+        summary: 'Rename a workspace',
+        description:
+          'Owner only. Changes the name and/or slug (the old slug is released at once, so old `/w/<slug>` links break). Members and invites see the new name right away.',
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body(
+          {
+            type: 'object',
+            properties: {
+              name: { type: 'string', minLength: 1, maxLength: LIMITS.workspaceName },
+              slug: { type: 'string', pattern: WORKSPACE_SLUG_RE.source },
+            },
+          },
+          { name: 'Ramdan & co', slug: 'ramdan-co' },
+        ),
+        responses: {
+          200: ok('The workspace', ref('Workspace'), { ...workspaceExample, name: 'Ramdan & co', slug: 'ramdan-co' }),
+          409: { description: '`slug_taken`', content: json(ref('Error'), errorExample('slug_taken', 'The slug "ramdan-co" is taken')) },
+          ...errors(400, 401, 403, 404, 422),
+        },
+      },
+      delete: {
+        tags: ['Workspaces'],
+        operationId: 'deleteWorkspace',
+        summary: 'Delete a workspace',
+        description:
+          'Owner only, confirmed by sending the current slug. Immediately and permanently deletes the workspace with all its content, files, members, invites, API tokens and its slug. If the request is cut short, send it again: it continues where it stopped.',
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body({ type: 'object', required: ['confirm'], properties: { confirm: { type: 'string', description: 'The current slug' } } }, { confirm: 'ramdan' }),
+        responses: { 204: { description: 'Deleted' }, ...errors(400, 401, 403, 404, 422) },
+      },
+    },
+    '/workspaces/{wid}/transfer': {
+      parameters: [param('workspaceId')],
+      post: {
+        tags: ['Workspaces'],
+        operationId: 'transferWorkspace',
+        summary: 'Transfer ownership',
+        description: `Owner only. Makes another member the owner; the previous owner becomes an admin. The new owner must own fewer than ${LIMITS.ownedWorkspaces} workspaces (422 \`workspace_limit\`).`,
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body({ type: 'object', required: ['uid'], properties: { uid: { type: 'string', description: 'uid of the new owner' } } }, { uid: memberExample.uid }),
+        responses: { 200: ok('The workspace', ref('Workspace'), { ...workspaceExample, ownerUid: memberExample.uid }), ...errors(400, 401, 403, 404, 422) },
+      },
+    },
+
+    // ------------------------------------------------------------ members
+    '/workspaces/{wid}/members/{uid}': {
+      parameters: [param('workspaceId'), param('memberUid')],
+      patch: {
+        tags: ['Members'],
+        operationId: 'setMemberRole',
+        summary: "Change a member's role",
+        description: "Admins and the owner. Sets `admin` or `member` on anyone but the owner (403; ownership moves only by transfer).",
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body({ type: 'object', required: ['role'], properties: { role: { type: 'string', enum: INVITE_ROLES } } }, { role: 'admin' }),
+        responses: { 200: ok('The member', ref('Member'), { ...memberExample, role: 'admin' }), ...errors(400, 401, 403, 404, 422) },
+      },
+      delete: {
+        tags: ['Members'],
+        operationId: 'removeMember',
+        summary: 'Remove a member, or leave',
+        description:
+          "With another member's uid (admins and the owner): removes them; the owner cannot be removed. With your own uid: leaves the workspace (the owner must transfer ownership first, else 403). Either way the member's API tokens in this workspace are revoked, and their access ends immediately.",
+        security: [{ firebaseIdToken: [] }],
+        responses: { 204: { description: 'Removed' }, ...errors(401, 403, 404) },
+      },
+    },
+
+    // ------------------------------------------------------------ invites
+    '/workspaces/{wid}/invites': {
+      parameters: [param('workspaceId')],
+      post: {
+        tags: ['Invites'],
+        operationId: 'createInvite',
+        summary: 'Invite by email',
+        description: `Admins and the owner. Creates a pending invite (role \`member\` by default) and emails it. A failed email keeps the invite: the response has \`emailSent: false\` and the invite \`emailStatus: failed\`, so it can be resent. A workspace has at most ${LIMITS.seats} seats, members plus pending invites (422 \`seat_limit\`). The invitee accepts by signing in with exactly that email.`,
+        security: [{ firebaseIdToken: [] }],
+        requestBody: body(
+          { type: 'object', required: ['email'], properties: { email: { type: 'string', format: 'email' }, role: { type: 'string', enum: INVITE_ROLES, default: 'member' } } },
+          { email: 'bob@example.com', role: 'member' },
+        ),
+        responses: {
+          201: ok('The invite and whether its email went out', ref('InviteResult'), { invite: inviteExample, emailSent: true }),
+          409: {
+            description: '`already_member` or `already_invited`',
+            content: json(ref('Error'), errorExample('already_invited', 'bob@example.com is already invited')),
+          },
+          ...errors(400, 401, 403, 404, 422),
+        },
+      },
+    },
+    '/workspaces/{wid}/invites/{email}': {
+      parameters: [param('workspaceId'), param('inviteEmail')],
+      delete: {
+        tags: ['Invites'],
+        operationId: 'deleteInvite',
+        summary: 'Revoke or decline an invite',
+        description: 'The invitee (signed in with that email) declines; admins and the owner revoke. Either way the invite is deleted.',
+        security: [{ firebaseIdToken: [] }],
+        responses: { 204: { description: 'Deleted' }, ...errors(401, 403, 404) },
+      },
+    },
+    '/workspaces/{wid}/invites/{email}/resend': {
+      parameters: [param('workspaceId'), param('inviteEmail')],
+      post: {
+        tags: ['Invites'],
+        operationId: 'resendInvite',
+        summary: 'Resend an invite email',
+        description: 'Admins and the owner. Sends the invite email again, at most once a minute (429).',
+        security: [{ firebaseIdToken: [] }],
+        responses: { 200: ok('The invite and whether its email went out', ref('InviteResult'), { invite: inviteExample, emailSent: true }), ...errors(401, 403, 404, 429) },
+      },
+    },
+    '/workspaces/{wid}/invites/{email}/accept': {
+      parameters: [param('workspaceId'), param('inviteEmail')],
+      post: {
+        tags: ['Invites'],
+        operationId: 'acceptInvite',
+        summary: 'Accept an invite',
+        description: "The invitee only (someone else's invite is a 404). Joins the workspace with the invite's role and deletes the invite.",
+        security: [{ firebaseIdToken: [] }],
+        responses: { 200: ok('The workspace and the new membership', ref('AcceptResult'), { workspace: workspaceExample, member: memberExample }), ...errors(401, 403, 404) },
+      },
+    },
+
+    // ------------------------------------------------------------ account
+    '/account/sync': {
+      post: {
+        tags: ['Account'],
+        operationId: 'syncAccount',
+        summary: 'Sync profile to memberships',
+        description: "Copies the caller's Google name and photo, and the time of this sign-in, to their member entry in every workspace. The app calls it once per session.",
+        security: [{ firebaseIdToken: [] }],
+        responses: { 204: { description: 'Synced' }, ...errors(401, 403) },
+      },
+    },
+
     // ------------------------------------------------------------ tokens
-    '/tokens': {
+    '/workspaces/{wid}/tokens': {
+      parameters: [param('workspaceId')],
       get: {
         tags: ['Tokens'],
         operationId: 'listTokens',
         summary: 'List API tokens',
-        description: "The caller's tokens (the owner: everyone's), newest first, including revoked ones. Secrets are never returned (only their first 8 characters, `prefix`).",
+        description:
+          "The workspace's tokens, newest first, including revoked ones: the caller's own, or all of them for admins and the owner. Secrets are never returned (only their first 8 characters, `prefix`).",
         security: [{ firebaseIdToken: [] }],
         parameters: [param('limit'), param('cursor')],
-        responses: { 200: ok('A page of tokens', pageOf('ApiToken'), list([tokenExample])), ...errors(400, 401, 403) },
+        responses: { 200: ok('A page of tokens', pageOf('ApiToken'), list([tokenExample])), ...errors(400, 401, 404) },
       },
       post: {
         tags: ['Tokens'],
         operationId: 'createToken',
         summary: 'Create an API token',
-        description: 'Creates a token and returns its secret — the only time it is ever shown. The name (1–40 characters) is the actor name on everything the token changes; the caller is recorded as its creator (`via`).',
+        description:
+          'Creates a token for this workspace and returns its secret — the only time it is ever shown. The name (1–40 characters) is the actor name on everything the token changes; the caller is recorded as its creator (`via`).',
         security: [{ firebaseIdToken: [] }],
         requestBody: body(
           {
@@ -1036,19 +1270,20 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
             },
             { token: { ...tokenExample, lastUsedAt: undefined, createdAt: '2026-10-19T08:00:00.000Z' }, secret: 'fira_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6' },
           ),
-          ...errors(401, 403, 422),
+          ...errors(401, 404, 422),
         },
       },
     },
-    '/tokens/{id}': {
+    '/workspaces/{wid}/tokens/{tid}': {
+      parameters: [param('workspaceId'), param('tokenId')],
       delete: {
         tags: ['Tokens'],
         operationId: 'revokeToken',
         summary: 'Revoke an API token',
-        description: "Marks the token revoked; requests with it fail with 401 from then on. Revoked tokens stay listed. Members can revoke only their own tokens (others' are 404); the owner can revoke any.",
+        description:
+          "Marks the token revoked; requests with it fail with 401 from then on. Revoked tokens stay listed. Members can revoke only their own tokens (others' are 404); admins and the owner can revoke any token of the workspace.",
         security: [{ firebaseIdToken: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, description: 'Token id', schema: { type: 'string' }, example: tokenExample.id }],
-        responses: { 200: ok('The revoked token', ref('ApiToken'), { ...tokenExample, revoked: true }), ...errors(401, 403, 404) },
+        responses: { 200: ok('The revoked token', ref('ApiToken'), { ...tokenExample, revoked: true }), ...errors(401, 404) },
       },
     },
 
@@ -1058,8 +1293,8 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Meta'],
         operationId: 'getMe',
         summary: 'Get the calling actor',
-        description: 'The actor of the token you are calling with. A cheap way to check that a token works.',
-        responses: { 200: ok('The token as an actor', ref('Actor'), agent), ...errors(401) },
+        description: "The actor of the token you are calling with, plus the token's workspace. A cheap way to check that a token works.",
+        responses: { 200: ok('The token as an actor, with its workspace', ref('Me'), meExample), ...errors(401) },
         'x-codeSamples': [curl('curl', `curl ${BASE}/me -H "Authorization: Bearer $FIRA_TOKEN"`)],
       },
     },
@@ -1087,7 +1322,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: "A member's Firebase ID token (only for /tokens; the Settings UI sends it)",
+        description: 'A signed-in user\'s Firebase ID token (only for the /workspaces and /account endpoints; the app sends it)',
       },
     },
     parameters: {
@@ -1102,6 +1337,17 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
       cardKey: { name: 'key', in: 'path', required: true, description: 'Card key (case-insensitive)', schema: { type: 'string' }, example: 'NI-42' },
       pageId: { name: 'id', in: 'path', required: true, description: 'Page id', schema: { type: 'string' }, example: pageExample.id },
       threadId: { name: 'tid', in: 'path', required: true, description: 'Thread id', schema: { type: 'string' }, example: threadExample.id },
+      workspaceId: { name: 'wid', in: 'path', required: true, description: 'Workspace id', schema: { type: 'string' }, example: WID },
+      memberUid: { name: 'uid', in: 'path', required: true, description: "The member's Firebase uid", schema: { type: 'string' }, example: memberExample.uid },
+      inviteEmail: {
+        name: 'email',
+        in: 'path',
+        required: true,
+        description: 'Invited email (case-insensitive; URL-encode it)',
+        schema: { type: 'string', format: 'email' },
+        example: inviteExample.email,
+      },
+      tokenId: { name: 'tid', in: 'path', required: true, description: 'Token id', schema: { type: 'string' }, example: tokenExample.id },
     },
     responses: {
       BadRequest: {
@@ -1118,9 +1364,16 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         description: 'Missing, malformed or revoked credentials',
         content: json(ref('Error'), errorExample('unauthorized', 'Invalid or revoked API token')),
       },
-      Forbidden: { description: 'Signed in, but not a member', content: json(ref('Error'), errorExample('forbidden', 'Members only')) },
+      Forbidden: {
+        description: 'Signed in, but without the required role (or without a verified email)',
+        content: json(ref('Error'), errorExample('forbidden', 'Only workspace admins can do this')),
+      },
+      TooManyRequests: {
+        description: 'The invite email was sent less than a minute ago',
+        content: json(ref('Error'), errorExample('too_many_requests', 'This invite was just sent; try again in a minute')),
+      },
       NotFound: {
-        description: 'Unknown card, project, page, thread, attachment or token',
+        description: 'Unknown card, project, page, thread, attachment or token, or a workspace you are not a member of',
         content: json(ref('Error'), errorExample('not_found', 'Card NI-99 not found')),
       },
       Conflict: { description: 'The card already has a work page', content: json(ref('Error'), errorExample('conflict', 'NI-42 already has a work page (PgWk3Nq7Hd1Lm5Rx9Zc2)')) },
@@ -1150,7 +1403,24 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
             properties: {
               code: {
                 type: 'string',
-                enum: ['bad_request', 'unauthorized', 'forbidden', 'not_found', 'method_not_allowed', 'conflict', 'version_conflict', 'payload_too_large', 'unprocessable', 'internal'],
+                enum: [
+                  'bad_request',
+                  'unauthorized',
+                  'forbidden',
+                  'not_found',
+                  'method_not_allowed',
+                  'conflict',
+                  'version_conflict',
+                  'slug_taken',
+                  'already_member',
+                  'already_invited',
+                  'payload_too_large',
+                  'unprocessable',
+                  'workspace_limit',
+                  'seat_limit',
+                  'too_many_requests',
+                  'internal',
+                ],
                 description: 'Machine-readable error code',
               },
               message: { type: 'string', description: 'What went wrong and, where useful, the valid values' },
@@ -1185,7 +1455,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
           name: { type: 'string', description: 'Token name or display name' },
           via: {
             type: 'object',
-            description: 'Tokens only: the member who created the token (absent on tokens created before members existed)',
+            description: 'Tokens only: the member who created the token',
             required: ['id', 'name'],
             properties: { id: { type: 'string', description: 'Firebase uid' }, name: { type: 'string', description: 'Display name' } },
           },
@@ -1194,20 +1464,107 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
       },
       ApiToken: {
         type: 'object',
-        required: ['id', 'name', 'color', 'prefix', 'createdAt', 'revoked'],
+        required: ['id', 'workspaceId', 'name', 'color', 'prefix', 'createdAt', 'revoked', 'userId', 'userEmail', 'userName'],
         properties: {
           id: { type: 'string' },
+          workspaceId: { type: 'string', description: 'The workspace the token works in' },
           name: { type: 'string', description: 'Actor name of its changes' },
           color: { type: 'string', enum: LABEL_COLORS, description: 'Avatar color in the app' },
           prefix: { type: 'string', description: 'First 8 characters of the secret, to recognize it' },
           createdAt: timestampSchema(),
           lastUsedAt: { ...timestampSchema(), description: 'Updated at most every 5 minutes' },
           revoked: { type: 'boolean' },
-          userEmail: { type: 'string', format: 'email', description: 'Creator (lowercased); absent on legacy tokens, which belong to the owner' },
+          userEmail: { type: 'string', format: 'email', description: 'Creator (lowercased)' },
           userId: { type: 'string', description: "Creator's Firebase uid" },
           userName: { type: 'string', description: "Creator's display name (the actor's `via.name`)" },
         },
         example: tokenExample,
+      },
+      Me: {
+        description: 'The calling token as an actor, plus its workspace.',
+        allOf: [
+          ref('Actor'),
+          {
+            type: 'object',
+            required: ['workspace'],
+            properties: {
+              workspace: {
+                type: 'object',
+                required: ['id', 'name', 'slug'],
+                properties: { id: { type: 'string' }, name: { type: 'string' }, slug: { type: 'string' } },
+              },
+            },
+          },
+        ],
+        example: meExample,
+      },
+      Workspace: {
+        type: 'object',
+        required: ['id', 'name', 'slug', 'ownerUid', 'createdAt', 'createdBy'],
+        properties: {
+          id: { type: 'string', description: 'Random and immutable' },
+          name: { type: 'string', minLength: 1, maxLength: LIMITS.workspaceName },
+          slug: { type: 'string', pattern: WORKSPACE_SLUG_RE.source, description: 'Unique; used in app URLs (`/w/<slug>`)' },
+          ownerUid: { type: 'string' },
+          createdAt: timestampSchema(),
+          createdBy: { type: 'string', description: 'uid' },
+        },
+        example: workspaceExample,
+      },
+      Member: {
+        type: 'object',
+        required: ['id', 'uid', 'email', 'name', 'role', 'joinedAt', 'workspaceName', 'workspaceSlug'],
+        properties: {
+          id: { type: 'string', description: '= uid' },
+          uid: { type: 'string' },
+          email: { type: 'string', format: 'email', description: 'Lowercased' },
+          name: { type: 'string' },
+          photoURL: { type: 'string' },
+          role: { type: 'string', enum: WORKSPACE_ROLES },
+          joinedAt: timestampSchema(),
+          invitedBy: { type: 'string', description: 'uid of the inviter; absent for the creator' },
+          lastSignInAt: timestampSchema(),
+          workspaceName: { type: 'string', description: 'Denormalized from the workspace' },
+          workspaceSlug: { type: 'string', description: 'Denormalized from the workspace' },
+        },
+        example: memberExample,
+      },
+      Invite: {
+        type: 'object',
+        required: ['id', 'email', 'role', 'invitedBy', 'createdAt', 'emailStatus', 'workspaceId', 'workspaceName'],
+        properties: {
+          id: { type: 'string', description: '= email' },
+          email: { type: 'string', format: 'email', description: 'Lowercased; matched exactly against the signed-in account' },
+          role: { type: 'string', enum: INVITE_ROLES },
+          invitedBy: {
+            type: 'object',
+            required: ['uid', 'name', 'email'],
+            properties: { uid: { type: 'string' }, name: { type: 'string' }, email: { type: 'string', format: 'email' } },
+          },
+          createdAt: timestampSchema(),
+          lastSentAt: { ...timestampSchema(), description: 'Last email attempt (Resend is allowed once a minute)' },
+          emailStatus: { type: 'string', enum: ['pending', 'sent', 'failed'], description: '`pending` while the email is being sent' },
+          emailError: { type: 'string', description: 'Why the last email failed' },
+          workspaceId: { type: 'string' },
+          workspaceName: { type: 'string' },
+        },
+        example: inviteExample,
+      },
+      InviteResult: {
+        type: 'object',
+        required: ['invite', 'emailSent'],
+        properties: {
+          invite: ref('Invite'),
+          emailSent: { type: 'boolean' },
+          emailError: { type: 'string', description: 'When `emailSent` is false' },
+        },
+        example: { invite: inviteExample, emailSent: true },
+      },
+      AcceptResult: {
+        type: 'object',
+        required: ['workspace', 'member'],
+        properties: { workspace: ref('Workspace'), member: ref('Member') },
+        example: { workspace: workspaceExample, member: memberExample },
       },
       Column: {
         type: 'object',
@@ -1381,7 +1738,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
           name: { type: 'string', description: 'File name' },
           size: { type: 'integer', description: 'Bytes' },
           contentType: { type: 'string' },
-          storagePath: { type: 'string', description: 'attachments/{cardId}/{attachmentId}/{name}' },
+          storagePath: { type: 'string', description: 'workspaces/{workspaceId}/cards/{cardId}/{attachmentId}/{name}' },
           uploadedBy: ref('Actor'),
           createdAt: timestampSchema(),
           url: { type: 'string', format: 'uri', description: 'Signed download URL; no token needed' },
@@ -1396,7 +1753,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
           name: { type: 'string', description: 'File name (path separators replaced)' },
           size: { type: 'integer', description: 'Bytes' },
           contentType: { type: 'string' },
-          storagePath: { type: 'string', description: 'pages/{pageId}/{attachmentId}/{name}' },
+          storagePath: { type: 'string', description: 'workspaces/{workspaceId}/pages/{pageId}/{attachmentId}/{name}' },
           url: {
             type: 'string',
             format: 'uri',

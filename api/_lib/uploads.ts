@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { bucket } from './admin.js';
 import { readFile } from './multipart.js';
+import { LIMITS } from '../../shared/workspaces.js';
 
 /** Card and page attachments: one `multipart/form-data` part named `file`, any content type. */
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = LIMITS.apiUploadBytes;
 
 /** Storage object names may not contain path separators from the client file name. */
 export function safeName(name: string): string {

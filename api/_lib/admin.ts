@@ -39,7 +39,7 @@ export function adminAuth(): Auth {
   return getAuth(app());
 }
 
-/** The default Storage bucket (attachments live under `attachments/{cardId}/{attachmentId}/{name}`). */
+/** The default Storage bucket (everything lives under `workspaces/{wid}/`, see shared/workspaces.ts). */
 export function bucket() {
   return getStorage(app()).bucket();
 }
