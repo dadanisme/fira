@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "test:api": "firebase emulators:exec --only firestore,storage,auth --project demo-fira 'tsx scripts/api-smoke.ts'",
     "test:rules": "firebase emulators:exec --only firestore,storage,auth --project demo-fira 'tsx scripts/rules-test.ts'",
-    "test:docs": "firebase emulators:exec --only firestore --project demo-fira 'TSX_TSCONFIG_PATH=tsconfig.app.json tsx scripts/page-save-check.ts'"
+    "test:docs": "firebase emulators:exec --only firestore --project demo-fira 'TSX_TSCONFIG_PATH=tsconfig.app.json tsx scripts/page-save-check.ts'",
+    "test:migrate": "firebase emulators:exec --only firestore,storage,auth --project demo-fira 'tsx scripts/migrate-check.ts'",
+    "migrate": "tsx --env-file-if-exists=.env.local scripts/migrate-workspaces.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
