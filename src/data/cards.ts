@@ -19,19 +19,22 @@ import { currentActor } from './actor';
 import { cardsCol, newDoc, rawDoc, type Stored } from './db';
 import { useLiveQuery, type Live } from './live';
 import { writeActivity } from './writes';
+import { useWorkspaceId } from './workspace';
 
 export type { ActivityContext, CardPatch };
 
 /** All cards of a project, archived and subtasks included (filter in the UI), unsorted. */
 export function useCards(projectId: string | undefined): Live<Card[]> {
-  const q = useMemo(() => (projectId ? query(cardsCol, where('projectId', '==', projectId)) : null), [projectId]);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => (projectId ? query(cardsCol(wid), where('projectId', '==', projectId)) : null), [projectId, wid]);
   return useLiveQuery(q);
 }
 
 /** A card by key (`NI-12`, case-insensitive). */
 export function useCard(key: string | undefined): Live<Card | null> {
+  const wid = useWorkspaceId();
   const normalized = key ? normalizeCardKey(key) : null;
-  const q = useMemo(() => (normalized ? query(cardsCol, where('key', '==', normalized), limit(1)) : null), [normalized]);
+  const q = useMemo(() => (normalized ? query(cardsCol(wid), where('key', '==', normalized), limit(1)) : null), [normalized, wid]);
   const live = useLiveQuery(q);
   return { ...live, data: live.data[0] ?? null };
 }

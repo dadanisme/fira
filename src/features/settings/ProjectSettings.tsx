@@ -5,6 +5,7 @@ import type { Page, Project } from '@shared/types';
 import { byRank } from '@shared/rank';
 import { usePages } from '../../data/pages';
 import { updateProject, type ProjectPatch } from '../../data/projects';
+import { useWsPath } from '../../data/workspace';
 import { Select } from '../../components/Select';
 import { run } from '../board/context';
 import { EditableText } from '../board/panel/EditableText';
@@ -15,6 +16,7 @@ import { PageTitle, RowList, SettingRow, SettingsSection } from './ui';
 export function ProjectSettings({ project }: { project: Project }) {
   const update = (patch: ProjectPatch) => run(() => updateProject(project.id, patch));
   const { data: pages } = usePages();
+  const ws = useWsPath();
 
   const live = useMemo(() => pages.filter((p) => !p.trashed), [pages]);
   const templates = useMemo(() => live.filter((p) => p.isTemplate).sort((a, b) => a.title.localeCompare(b.title)), [live]);
@@ -33,7 +35,7 @@ export function ProjectSettings({ project }: { project: Project }) {
         }
       >
         <Link
-          to={`/p/${project.key}`}
+          to={ws(`/p/${project.key}`)}
           className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-base text-fg-muted hover:bg-hover hover:text-fg"
         >
           Open board <ArrowUpRight size="0.8125rem" />

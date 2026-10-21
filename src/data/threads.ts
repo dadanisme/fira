@@ -5,10 +5,12 @@ import { randomId } from '@shared/ids';
 import { currentActor } from './actor';
 import { newDoc, rawDoc, threadsCol, type Stored } from './db';
 import { useLiveQuery, type Live } from './live';
+import { useWorkspaceId } from './workspace';
 
 /** Inline comment threads of a page (resolved included), unsorted. */
 export function useThreads(pageId: string | undefined): Live<Thread[]> {
-  const q = useMemo(() => (pageId ? query(threadsCol(pageId)) : null), [pageId]);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => (pageId ? query(threadsCol(pageId, wid)) : null), [pageId, wid]);
   return useLiveQuery(q);
 }
 

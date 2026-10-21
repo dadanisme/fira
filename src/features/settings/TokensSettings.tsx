@@ -6,21 +6,23 @@ import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { useMembers } from '../../data/members';
-import { useIsOwner, useUser } from '../../lib/auth';
+import { createToken, listTokens, revokeToken } from '../../data/tokens';
+import { currentWorkspaceId, useIsAdmin, useWorkspaceId } from '../../data/workspace';
+import { useUser } from '../../lib/auth';
 import { cx } from '../../lib/cx';
 import { absoluteTime, errorMessage, relativeTime } from '../board/format';
 import { useDelayedFlag } from '../board/hooks';
 import { ColorSwatches } from '../board/pickers';
 import { toastError } from '../board/toast';
-import { createToken, listTokens, revokeToken } from './api';
 import { PageTitle, RowList, SettingsSection } from './ui';
 
 /**
  * API tokens for automation agents. Managed through the REST API (the server hashes secrets).
- * Members see their own tokens; the owner sees everyone's, with who created each.
+ * Members see their own tokens; admins and the owner see everyone's, with who created each.
  */
 export function TokensSettings() {
-  const owner = useIsOwner();
+  const owner = useIsAdmin();
+  const wid = useWorkspaceId();
   const user = useUser();
   const { data: members } = useMembers();
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
@@ -30,21 +32,21 @@ export function TokensSettings() {
   const slow = useDelayedFlag(tokens === null && !error);
 
   const load = useCallback(() => {
-    listTokens().then(
+    listTokens(wid).then(
       (list) => {
         setTokens(list);
         setError(null);
       },
       (err) => setError(errorMessage(err)),
     );
-  }, []);
+  }, [wid]);
   useEffect(load, [load]);
 
   const revoke = async (t: ApiToken) => {
     if (!confirm(`Revoke “${t.name}”? Agents using it stop working immediately.`)) return;
     setTokens((list) => list?.map((x) => (x.id === t.id ? { ...x, revoked: true } : x)) ?? null);
     try {
-      const updated = await revokeToken(t.id);
+      const updated = await revokeToken(wid, t.id);
       setTokens((list) => list?.map((x) => (x.id === t.id ? updated : x)) ?? null);
     } catch (err) {
       toastError(err);
@@ -63,7 +65,7 @@ export function TokensSettings() {
           <>
             Personal tokens for agents calling <code className="text-sm">/api/v1</code> with <code className="text-sm">Authorization: Bearer fira_…</code>.
             Their changes show up under the token's name and yours, e.g. “agen (via {user.displayName ?? 'you'})”.
-            {owner && ' As the owner, you see and can revoke every member’s tokens.'}{' '}
+            {owner && ' As an admin, you see and can revoke every member’s tokens.'}{' '}
             {/* A static page outside the SPA (public/docs/api), so a plain link, not a router Link. */}
             <a href="/docs/api" target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">
               API documentation →
@@ -134,7 +136,7 @@ function CreateForm({ onCreated }: { onCreated: (c: { token: ApiToken; secret: s
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      onCreated(await createToken(trimmed, color ?? colorFor(trimmed)));
+      onCreated(await createToken(currentWorkspaceId(), trimmed, color ?? colorFor(trimmed)));
       setName('');
       setColor(null);
     } catch (err) {
@@ -200,10 +202,9 @@ function SecretNotice({ created, onDone }: { created: { token: ApiToken; secret:
   );
 }
 
-/** Who created a token, for the owner's view. Legacy tokens without a creator are the owner's. */
+/** Who created a token, for the admins' view. */
 function creatorOf(t: ApiToken, members: readonly Member[]): { name: string; removed: boolean } {
-  if (!t.userEmail) return { name: 'Owner', removed: false };
-  const member = members.find((m) => m.id === t.userEmail);
+  const member = members.find((m) => m.uid === t.userId);
   return { name: member?.name ?? t.userName ?? t.userEmail, removed: members.length > 0 && !member };
 }
 

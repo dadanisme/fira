@@ -27,6 +27,7 @@ import {
 import type { Page } from '@shared/types';
 import { byRank } from '@shared/rank';
 import { savePage, trashPage, updatePageMeta, usePages } from '../../data/pages';
+import { useWsPath } from '../../data/workspace';
 import { SidebarLink, SidebarSection } from '../../app/SidebarSection';
 import { IconButton } from '../../components/IconButton';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../../components/Menu';
@@ -84,10 +85,11 @@ function useExpanded(): ReadonlySet<string> {
 export default function DocsTree() {
   const { data: pages } = usePages();
   const navigate = useNavigate();
+  const ws = useWsPath();
   const templates = useMemo(() => pages.filter((p) => p.isTemplate && !p.trashed).sort(byRank), [pages]);
   const trashCount = useMemo(() => pages.filter((p) => p.trashed).length, [pages]);
 
-  const create = (id: string) => navigate(`/d/${id}`);
+  const create = (id: string) => navigate(ws(`/d/${id}`));
 
   return (
     <>
@@ -134,7 +136,7 @@ export default function DocsTree() {
         <PageTree pages={pages} templates empty="No templates" />
       </SidebarSection>
       <div className="-mt-2 flex flex-col">
-        <SidebarLink to="/trash" icon={<Trash2 size="0.875rem" />}>
+        <SidebarLink to={ws('/trash')} icon={<Trash2 size="0.875rem" />}>
           Trash{trashCount > 0 && <span className="ml-1.5 text-fg-faint">{trashCount}</span>}
         </SidebarLink>
       </div>
@@ -144,7 +146,7 @@ export default function DocsTree() {
 
 function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boolean; empty: string }) {
   const stored = useExpanded();
-  const activeMatch = useMatch('/d/:pageId');
+  const activeMatch = useMatch('/w/:slug/d/:pageId');
   const activePageId = activeMatch?.params.pageId;
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -235,6 +237,7 @@ function PageIcon({ page }: { page: Page }) {
 function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pages: Page[]; depth: number; expanded: boolean; active: boolean }) {
   const { page } = item;
   const navigate = useNavigate();
+  const ws = useWsPath();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -246,7 +249,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
 
   const addChild = () => {
     setExpanded(page.id, true);
-    navigate(`/d/${addPage(pages, page.id, page.isTemplate)}`);
+    navigate(ws(`/d/${addPage(pages, page.id, page.isTemplate)}`));
   };
 
   return (
@@ -290,14 +293,14 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
             <PageIcon page={page} />
           </button>
         ) : (
-          <Link to={`/d/${page.id}`} draggable={false} tabIndex={-1} className="flex w-4 shrink-0 justify-center">
+          <Link to={ws(`/d/${page.id}`)} draggable={false} tabIndex={-1} className="flex w-4 shrink-0 justify-center">
             <PageIcon page={page} />
           </Link>
         )}
         {renaming ? (
           <RenameInput page={page} onDone={() => setRenaming(false)} />
         ) : (
-          <Link to={`/d/${page.id}`} draggable={false} className="min-w-0 flex-1 truncate py-1 pl-1">
+          <Link to={ws(`/d/${page.id}`)} draggable={false} className="min-w-0 flex-1 truncate py-1 pl-1">
             {pageTitle(page)}
           </Link>
         )}
@@ -319,11 +322,11 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
                 Add subpage
               </MenuItem>
               {page.isTemplate && (
-                <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => navigate(`/d/${addPageFromTemplate(pages, page, null)}`)}>
+                <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => navigate(ws(`/d/${addPageFromTemplate(pages, page, null)}`))}>
                   New page from template
                 </MenuItem>
               )}
-              <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
+              <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(ws(`/d/${duplicate(pages, page)}`))}>
                 Duplicate
               </MenuItem>
               <MenuItem
@@ -338,7 +341,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
                 icon={<Trash2 size="0.875rem" />}
                 onSelect={() => {
                   trashPage(page, pages).catch(reportError);
-                  if (active) navigate('/trash');
+                  if (active) navigate(ws('/trash'));
                 }}
               >
                 Move to trash

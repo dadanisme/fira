@@ -50,3 +50,39 @@ export function useLiveDoc<T>(ref: DocumentReference<T> | null): Live<T | null> 
   const current = ref !== null && state.ref === ref;
   return { data: current ? state.data : null, loading: ref !== null && !current, error: current ? state.error : null };
 }
+
+/** A live query result plus whether it came from the local cache (it may still be missing server-side changes). */
+export type LiveSynced<T> = Live<T> & { fromCache: boolean };
+
+/**
+ * Like useLiveQuery, but also reports `fromCache`, and keeps `loading` true while the only
+ * result is an empty snapshot from the cache (a query the cache has never seen answers
+ * "nothing" first). Use it where "no results" leads somewhere, e.g. "Workspace not found".
+ */
+export function useLiveQuerySynced<T>(q: Query<T> | null): LiveSynced<T[]> {
+  const [state, setState] = useState<{ q: Query<T> | null; data: T[]; fromCache: boolean; error: Error | null }>({
+    q: null,
+    data: EMPTY,
+    fromCache: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!q) return;
+    return onSnapshot(
+      q,
+      { includeMetadataChanges: true },
+      (snap) => setState({ q, data: snap.docs.map((d) => d.data()), fromCache: snap.metadata.fromCache, error: null }),
+      (error) => setState({ q, data: EMPTY, fromCache: false, error }),
+    );
+  }, [q]);
+
+  const current = q !== null && state.q === q;
+  const waiting = current && state.fromCache && state.data.length === 0 && !state.error;
+  return {
+    data: current ? state.data : EMPTY,
+    loading: q !== null && (!current || waiting),
+    error: current ? state.error : null,
+    fromCache: current ? state.fromCache : true,
+  };
+}

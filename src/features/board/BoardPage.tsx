@@ -6,6 +6,7 @@ import { rankAfterLast } from '@shared/rank';
 import { createCard, useCards } from '../../data/cards';
 import { useLabels } from '../../data/labels';
 import { useProject } from '../../data/projects';
+import { useWsPath } from '../../data/workspace';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Popover } from '../../components/Popover';
@@ -19,7 +20,7 @@ import { CardDialog } from './panel/CardDialog';
 import { toastError, Toasts } from './toast';
 import { LabelsProvider } from './ui';
 
-/** `/p/:projectKey/:cardKey?`: the board, plus the card dialog when a card key is present. */
+/** `/w/:slug/p/:projectKey/:cardKey?`: the board, plus the card dialog when a card key is present. */
 export default function BoardPage() {
   const { projectKey, cardKey } = useParams();
   const { data: project, loading } = useProject(projectKey);
@@ -28,6 +29,7 @@ export default function BoardPage() {
   const labels = useStableList(useLabels().data);
   const location = useLocation();
   const navigate = useNavigate();
+  const ws = useWsPath();
   const search = location.search;
   const filters = useMemo(() => parseFilters(new URLSearchParams(search)), [search]);
   const slow = useDelayedFlag(loading || cardsLive.loading);
@@ -37,10 +39,10 @@ export default function BoardPage() {
   searchRef.current = search;
   const key = project?.key;
   const onOpen = useCallback(
-    (cardKey: string) => navigate({ pathname: `/p/${key}/${cardKey}`, search: searchRef.current }),
-    [navigate, key],
+    (cardKey: string) => navigate({ pathname: ws(`/p/${key}/${cardKey}`), search: searchRef.current }),
+    [navigate, ws, key],
   );
-  const onClose = useCallback(() => navigate({ pathname: `/p/${key}`, search: searchRef.current }), [navigate, key]);
+  const onClose = useCallback(() => navigate({ pathname: ws(`/p/${key}`), search: searchRef.current }), [navigate, ws, key]);
 
   // The dialog stays mounted for its exit animation after the URL drops the card key.
   const openKey = key && cardKey ? `${key}/${cardKey.toUpperCase()}` : undefined;
@@ -72,7 +74,7 @@ export default function BoardPage() {
             <span className="flex-1" />
             <NewCardButton onCreated={onOpen} />
             <Link
-              to={`/settings/projects/${project.key}`}
+              to={ws(`/settings/projects/${project.key}`)}
               aria-label="Project settings"
               title="Project settings"
               className="inline-flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"

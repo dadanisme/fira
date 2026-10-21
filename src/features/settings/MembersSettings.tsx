@@ -2,13 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { Plus, Trash } from 'lucide-react';
 import type { Member } from '@shared/types';
 import { isValidEmail, normalizeEmail } from '@shared/actors';
-import { addMember, removeMember, useMembers } from '../../data/members';
+import { useMembers } from '../../data/members';
+import { useIsAdmin, useWorkspaceId } from '../../data/workspace';
+import { inviteMember, removeMember } from '../../data/workspaces';
 import { Avatar } from '../../components/Avatar';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { Input } from '../../components/Input';
-import { useIsOwner, useUser } from '../../lib/auth';
 import { run } from '../board/context';
 import { absoluteTime, relativeTime } from '../board/format';
 import { useDelayedFlag } from '../board/hooks';
@@ -17,18 +18,18 @@ import { PageTitle, RowList } from './ui';
 /** Settings → Members: who may use fira. Everyone sees the list; only the owner adds and removes. */
 export function MembersSettings() {
   const { data: members, loading } = useMembers();
-  const user = useUser();
-  const owner = useIsOwner();
+  const owner = useIsAdmin();
+  const wid = useWorkspaceId();
   const slow = useDelayedFlag(loading);
   const [email, setEmail] = useState('');
   const normalized = normalizeEmail(email);
-  const exists = members.some((m) => m.id === normalized);
+  const exists = members.some((m) => m.email === normalized);
   const invalid = normalized !== '' && !isValidEmail(normalized);
 
   const add = (e: FormEvent) => {
     e.preventDefault();
     if (!normalized || invalid || exists) return;
-    run(() => addMember(normalized, user.email ?? ''));
+    run(() => inviteMember(wid, normalized));
     setEmail('');
   };
 
@@ -47,7 +48,7 @@ export function MembersSettings() {
       ) : (
         <RowList>
           {members.map((m) => (
-            <MemberRow key={m.id} member={m} canRemove={owner && m.role !== 'owner'} />
+            <MemberRow key={m.id} wid={wid} member={m} canRemove={owner && m.role !== 'owner'} />
           ))}
         </RowList>
       )}
@@ -79,10 +80,10 @@ export function MembersSettings() {
   );
 }
 
-function MemberRow({ member: m, canRemove }: { member: Member; canRemove: boolean }) {
+function MemberRow({ wid, member: m, canRemove }: { wid: string; member: Member; canRemove: boolean }) {
   const remove = () => {
     if (!confirm(`Remove ${m.name ?? m.email}? They lose access immediately, and their API tokens stop working.`)) return;
-    run(() => removeMember(m.email));
+    run(() => removeMember(wid, m.uid));
   };
   return (
     <li className="flex h-11 items-center gap-2.5 px-3">
@@ -98,7 +99,7 @@ function MemberRow({ member: m, canRemove }: { member: Member; canRemove: boolea
           {m.lastSignInAt ? (
             <span title={absoluteTime(m.lastSignInAt)}>Signed in {relativeTime(m.lastSignInAt)}</span>
           ) : (
-            <span title={absoluteTime(m.addedAt)}>Invited {relativeTime(m.addedAt)}, hasn't signed in yet</span>
+            <span title={absoluteTime(m.joinedAt)}>Joined {relativeTime(m.joinedAt)}</span>
           )}
         </div>
       </div>

@@ -28,6 +28,7 @@ import {
   usePages,
 } from '../../data/pages';
 import { usePagePresence, type PagePresence } from '../../data/presence';
+import { useWsPath } from '../../data/workspace';
 import { useThreads } from '../../data/threads';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -104,6 +105,7 @@ function useWidthStep(ref: RefObject<HTMLElement | null>): number {
 
 function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const navigate = useNavigate();
+  const ws = useWsPath();
   const save = useAutosave(page);
   const user = useUser();
   const me = useMemo(
@@ -239,7 +241,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
           {page.isTemplate && <LayoutTemplate size="0.8125rem" className="mr-1 shrink-0 text-fg-faint" />}
           {crumbs.map((c) => (
             <span key={c.id} className="flex min-w-0 items-center gap-0.5">
-              <Link to={`/d/${c.id}`} className="max-w-40 truncate rounded px-1 py-0.5 hover:bg-hover hover:text-fg">
+              <Link to={ws(`/d/${c.id}`)} className="max-w-40 truncate rounded px-1 py-0.5 hover:bg-hover hover:text-fg">
                 {c.icon && <span className="mr-1">{c.icon}</span>}
                 {pageTitle(c)}
               </Link>
@@ -252,7 +254,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
           </span>
           {card && (
             <Link
-              to={`/p/${card.key.split('-')[0]}/${card.key}`}
+              to={ws(`/p/${card.key.split('-')[0]}/${card.key}`)}
               title={card.title}
               className="ml-2 inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-xs font-medium"
               style={{ background: 'var(--label-blue-bg)', color: 'var(--label-blue-fg)' }}
@@ -330,7 +332,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
           )}
         >
           <Menu>
-            <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(`/d/${duplicate(pages, page)}`)}>
+            <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(ws(`/d/${duplicate(pages, page)}`))}>
               Duplicate
             </MenuItem>
             <MenuItem
@@ -387,7 +389,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             confirmLabel="Delete"
             onConfirm={() => {
               deletePageForever(page, pages).catch(reportError);
-              navigate('/trash');
+              navigate(ws('/trash'));
             }}
           >
             Delete forever

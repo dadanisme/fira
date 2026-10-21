@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { LayoutGrid, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 import { useProjects } from '../data/projects';
+import { useWsPath } from '../data/workspace';
 import { signOutUser, useUser } from '../lib/auth';
 import { Avatar } from '../components/Avatar';
 import { IconButton } from '../components/IconButton';
@@ -24,6 +25,7 @@ const DocsTree = lazy(() => import('../features/docs/DocsTree'));
  */
 export function Sidebar() {
   const s = useSidebar();
+  const ws = useWsPath();
   const visible = s.narrow ? s.drawerOpen : s.docked || s.peek;
   const pinnable = s.peek; // peeking: the header button keeps it open instead of collapsing
 
@@ -74,7 +76,7 @@ export function Sidebar() {
         </Suspense>
       </nav>
       <div className="flex items-center gap-1 border-t border-line p-2">
-        <SidebarLink to="/settings" icon={<Settings size="0.9375rem" />} className="flex-1">
+        <SidebarLink to={ws('/settings')} icon={<Settings size="0.9375rem" />} className="flex-1">
           Settings
         </SidebarLink>
         <ThemeToggle />
@@ -88,6 +90,7 @@ export function Sidebar() {
 function ProjectsSection() {
   const { data: projects } = useProjects();
   const navigate = useNavigate();
+  const ws = useWsPath();
 
   return (
     <SidebarSection
@@ -105,7 +108,7 @@ function ProjectsSection() {
             <NewProjectForm
               onCreated={(key) => {
                 close();
-                navigate(`/p/${key}`);
+                navigate(ws(`/p/${key}`));
               }}
             />
           )}
@@ -115,7 +118,7 @@ function ProjectsSection() {
       {projects.map((p) => (
         <SidebarLink
           key={p.id}
-          to={`/p/${p.key}`}
+          to={ws(`/p/${p.key}`)}
           icon={<span className="font-mono text-2xs font-semibold text-fg-faint">{p.key.slice(0, 2)}</span>}
         >
           {p.name}
@@ -127,6 +130,7 @@ function ProjectsSection() {
 
 function UserMenu() {
   const user = useUser();
+  const navigate = useNavigate();
   return (
     <Popover
       placement="bottom-end"
@@ -138,6 +142,10 @@ function UserMenu() {
     >
       <Menu>
         <div className="px-2 py-1.5 text-sm text-fg-muted">{user.email}</div>
+        {/* Placeholder until the workspace switcher (T3). */}
+        <MenuItem icon={<LayoutGrid size="0.875rem" />} onSelect={() => navigate('/workspaces')}>
+          All workspaces
+        </MenuItem>
         <MenuItem icon={<LogOut size="0.875rem" />} onSelect={() => void signOutUser()}>
           Sign out
         </MenuItem>

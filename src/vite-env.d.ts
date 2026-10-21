@@ -6,7 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_PROJECT_ID: string;
   readonly VITE_FIREBASE_STORAGE_BUCKET: string;
   readonly VITE_FIREBASE_APP_ID: string;
-  readonly VITE_OWNER_EMAIL: string;
+  /** `1`: use the local Firebase emulators (npm run dev:emu). */
+  readonly VITE_USE_EMULATORS?: string;
 }
 
 interface ImportMeta {

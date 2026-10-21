@@ -6,10 +6,12 @@ import { currentActor } from './actor';
 import { commentsCol, newDoc, rawDoc, type Stored } from './db';
 import { useLiveQuery, type Live } from './live';
 import { writeActivity } from './writes';
+import { useWorkspaceId } from './workspace';
 
 /** Comments of a card, oldest first. */
 export function useComments(cardId: string | undefined): Live<Comment[]> {
-  const q = useMemo(() => (cardId ? query(commentsCol(cardId), orderBy('createdAt')) : null), [cardId]);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => (cardId ? query(commentsCol(cardId, wid), orderBy('createdAt')) : null), [cardId, wid]);
   return useLiveQuery(q);
 }
 

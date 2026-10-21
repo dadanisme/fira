@@ -1,8 +1,9 @@
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
+import { deleteDoc, onSnapshot, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { db } from '../lib/firebase';
+import { colIn, docIn } from './db';
+import { useWorkspaceId } from './workspace';
 
-/** Someone with a page open: `pages/{pageId}/presence/{uid}`. */
+/** Someone with a page open: `workspaces/{wid}/pages/{pageId}/presence/{uid}`. */
 export interface PagePresence {
   uid: string;
   name: string;
@@ -24,8 +25,6 @@ export const PRESENCE_HEARTBEAT_MS = 30_000;
 /** Entries without a heartbeat for this long are ignored (closed tab, crash, hidden tab). */
 export const PRESENCE_TTL_MS = 75_000;
 
-const presenceCol = (pageId: string) => collection(db, 'pages', pageId, 'presence');
-
 /**
  * Announces `me` on a page and returns the *other* people currently on it, freshest
  * first. Writes: one on open, one per heartbeat (every 30 s while the tab is visible),
@@ -37,6 +36,7 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
   const [entries, setEntries] = useState<{ pageId: string; list: Entry[]; skew: number }>({ pageId, list: [], skew: 0 });
   const [now, setNow] = useState(() => Date.now());
   const editingRef = useRef(editing);
+  const wid = useWorkspaceId();
   const { uid, name, photoURL } = me;
 
   // Listen.
@@ -44,7 +44,7 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
     let lastOwnAt = 0;
     let skew = 0;
     return onSnapshot(
-      presenceCol(pageId),
+      colIn(wid, 'pages', pageId, 'presence'),
       (snap) => {
         const list = snap.docs.map((d) => {
           const data = d.data({ serverTimestamps: 'estimate' });
@@ -68,7 +68,7 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
       },
       (err) => reportError(err),
     );
-  }, [pageId, uid]);
+  }, [wid, pageId, uid]);
 
   // Re-evaluate staleness even when nothing changes.
   useEffect(() => {
@@ -78,7 +78,7 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
 
   // Heartbeat + leave.
   useEffect(() => {
-    const ref = doc(db, 'pages', pageId, 'presence', uid);
+    const ref = docIn(wid, 'pages', pageId, 'presence', uid);
     const beat = () => {
       if (document.visibilityState !== 'visible') return;
       setDoc(ref, { uid, name, photoURL, editing: editingRef.current, at: serverTimestamp() }).catch(reportError);
@@ -98,7 +98,7 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
       removeEventListener('pageshow', beat);
       leave();
     };
-  }, [pageId, uid, name, photoURL]);
+  }, [wid, pageId, uid, name, photoURL]);
 
   // Announce editing flips right away (the heartbeat effect covers the initial value).
   const announced = useRef(editing);
@@ -107,8 +107,8 @@ export function usePagePresence(pageId: string, me: PresenceUser, editing: boole
     if (announced.current === editing) return;
     announced.current = editing;
     if (document.visibilityState !== 'visible') return;
-    setDoc(doc(db, 'pages', pageId, 'presence', uid), { uid, name, photoURL, editing, at: serverTimestamp() }).catch(reportError);
-  }, [editing, pageId, uid, name, photoURL]);
+    setDoc(docIn(wid, 'pages', pageId, 'presence', uid), { uid, name, photoURL, editing, at: serverTimestamp() }).catch(reportError);
+  }, [editing, wid, pageId, uid, name, photoURL]);
 
   return useMemo(() => {
     if (entries.pageId !== pageId) return [];

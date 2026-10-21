@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, Copy, Link2, X } from 'lucide-react';
 import type { Card } from '@shared/types';
 import { Dialog } from '../../../components/Dialog';
 import { IconButton } from '../../../components/IconButton';
+import { useWsPath } from '../../../data/workspace';
 import { patchCard, useBoardData } from '../context';
 import { TypeIcon } from '../ui';
 import { Attachments } from './Attachments';
@@ -39,6 +40,7 @@ export function CardDialog({
   // The card the dialog was opened for (breadcrumbs and subtasks switch cards inside it).
   const [openerKey] = useState(cardKey);
   const projectKey = data.project.key;
+  const ws = useWsPath();
 
   useEffect(() => {
     // Switching cards replaces the content; keep focus inside the dialog.
@@ -52,7 +54,7 @@ export function CardDialog({
       onClose={onClose}
       onExited={onExited}
       labelledBy={titleId}
-      returnFocus={() => document.querySelector<HTMLElement>(`a[href="/p/${projectKey}/${openerKey}"]`)}
+      returnFocus={() => document.querySelector<HTMLElement>(`a[href="${ws(`/p/${projectKey}/${openerKey}`)}"]`)}
       className="sm:max-w-230 sm:border sm:border-line"
     >
       <h2 id={titleId} className="sr-only">
@@ -109,7 +111,8 @@ function Breadcrumb({ card, cardKey, onOpen }: { card: Card | undefined; cardKey
 
 function Actions({ card }: { card: Card }) {
   const data = useBoardData();
-  const url = `${location.origin}/p/${data.project.key}/${card.key}`;
+  const ws = useWsPath();
+  const url = `${location.origin}${ws(`/p/${data.project.key}/${card.key}`)}`;
   const copy = (text: string) => void navigator.clipboard?.writeText(text);
   return (
     <>

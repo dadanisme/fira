@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, type Connect, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite'
 
 /** Serves the static API reference (public/docs/api/index.html) at `/docs/api` in dev and preview, like vercel.json. */
 function apiDocs(): Plugin {
@@ -18,8 +18,12 @@ function apiDocs(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss(), apiDocs()],
+  // Emulator mode (npm run dev:emu): the API runs locally (scripts/dev-emu-api.ts) against the emulators.
+  server: ['1', 'true'].includes(loadEnv(mode, process.cwd(), '').VITE_USE_EMULATORS ?? '')
+    ? { proxy: { '/api': 'http://127.0.0.1:3100' } }
+    : undefined,
   resolve: {
     alias: { '@shared': fileURLToPath(new URL('./shared', import.meta.url)) },
   },
@@ -37,4 +41,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

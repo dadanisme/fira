@@ -4,14 +4,15 @@ import { DEFAULT_COLUMN_NAMES, type Column, type FieldDef, type Project } from '
 import { isProjectKey } from '@shared/keys';
 import { byRank, rankAfterLast } from '@shared/rank';
 import { randomId } from '@shared/ids';
-import { newDoc, projectsCol, rawDoc, type Stored } from './db';
+import { newDocIn, projectsCol, rawDoc, type Stored } from './db';
 import { useLiveQuery, type Live } from './live';
+import { currentWorkspaceId, useWorkspaceId } from './workspace';
 
-const allProjects = query(projectsCol);
-
-/** All projects, sorted by rank. */
+/** All projects of the workspace, sorted by rank. */
 export function useProjects(): Live<Project[]> {
-  const live = useLiveQuery(allProjects);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => query(projectsCol(wid)), [wid]);
+  const live = useLiveQuery(q);
   const data = useMemo(() => [...live.data].sort(byRank), [live.data]);
   return { ...live, data };
 }
@@ -35,10 +36,11 @@ export function newFieldDef(def: Omit<FieldDef, 'id'>): FieldDef {
 export async function createProject(input: { key: string; name: string }): Promise<string> {
   const key = input.key.trim().toUpperCase();
   if (!isProjectKey(key)) throw new Error('Key must be 2–10 uppercase letters or digits, starting with a letter');
-  const existing = (await getDocs(allProjects)).docs.map((d) => d.data());
+  const wid = currentWorkspaceId();
+  const existing = (await getDocs(query(projectsCol(wid)))).docs.map((d) => d.data());
   if (existing.some((p) => p.key === key)) throw new Error(`Project key ${key} is already used`);
 
-  const ref = newDoc('projects');
+  const ref = newDocIn(wid, 'projects');
   const project: Stored<Project, 'createdAt'> = {
     key,
     name: input.name.trim() || key,

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emu": "firebase emulators:exec --only firestore,storage,auth --project demo-fira 'tsx scripts/dev-emu-api.ts & VITE_USE_EMULATORS=1 vite'",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "lint": "oxlint",

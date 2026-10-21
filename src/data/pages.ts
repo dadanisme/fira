@@ -1,5 +1,4 @@
 import {
-  collection,
   deleteField,
   doc,
   getDocs,
@@ -16,42 +15,49 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage
 import { useMemo } from 'react';
 import type { Card, Page, PageAttachment, PageVersion } from '@shared/types';
 import { startsVersionSession, subtreeIds } from '@shared/pages';
+import { LIMITS, pageAttachmentPath } from '@shared/workspaces';
 import { db, storage } from '../lib/firebase';
 import { currentActor } from './actor';
-import { cardsCol, newDoc, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
+import { cardsCol, colIn, docIn, newDoc, newDocIn, pagesCol, rawDoc, threadsCol, versionsCol, type Stored } from './db';
 import { useLiveQuery, useLiveDoc, type Live } from './live';
 import { savePageIfCurrent, type PageSaveOptions, type PageSaveResult } from './pageSave';
 import { commitInChunks } from './writes';
+import { currentWorkspaceId, useWorkspaceId } from './workspace';
 
 export type { PageSaveResult, PageState } from './pageSave';
 
-const allPages = query(pagesCol);
-
-/** Every page (trashed and templates included; filter in the UI), unsorted. One listener for the whole tree. */
+/** Every page of the workspace (trashed and templates included; filter in the UI), unsorted. One listener for the whole tree. */
 export function usePages(): Live<Page[]> {
-  return useLiveQuery(allPages);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => query(pagesCol(wid)), [wid]);
+  return useLiveQuery(q);
 }
 
 export function usePage(id: string | undefined): Live<Page | null> {
-  const ref = useMemo(() => (id ? doc(pagesCol, id) : null), [id]);
+  const wid = useWorkspaceId();
+  const ref = useMemo(() => (id ? doc(pagesCol(wid), id) : null), [id, wid]);
   return useLiveDoc(ref);
 }
 
 /** The card a work page belongs to (`page.cardId`), for the link back to it. */
 export function useLinkedCard(cardId: string | undefined): Live<Card | null> {
-  const ref = useMemo(() => (cardId ? doc(cardsCol, cardId) : null), [cardId]);
+  const wid = useWorkspaceId();
+  const ref = useMemo(() => (cardId ? doc(cardsCol(wid), cardId) : null), [cardId, wid]);
   return useLiveDoc(ref);
 }
 
 /**
- * Uploads an image embedded in a page to `pages/{pageId}/{attachmentId}/{name}` and records it
- * in `pages/{pageId}/attachments` (like `POST /pages/{id}/attachments`); resolves to its
- * non-expiring download URL.
+ * Uploads an image embedded in a page to `workspaces/{wid}/pages/{pageId}/{attachmentId}/{name}`
+ * and records it in the page's `attachments` (like `POST /pages/{id}/attachments`); resolves to
+ * its non-expiring download URL. Rejects with "Files are limited to 10 MB" before uploading a
+ * larger file.
  */
 export async function uploadPageImage(pageId: string, file: File): Promise<string> {
+  if (file.size > LIMITS.fileBytes) throw new Error('Files are limited to 10 MB');
+  const wid = currentWorkspaceId();
   const name = file.name.replace(/[^\w.-]+/g, '_') || 'image';
-  const entry = newDoc('pages', pageId, 'attachments');
-  const storagePath = `pages/${pageId}/${entry.id}/${name}`;
+  const entry = newDocIn(wid, 'pages', pageId, 'attachments');
+  const storagePath = pageAttachmentPath(wid, pageId, entry.id, name);
   const contentType = file.type || 'application/octet-stream';
   const ref = storageRef(storage, storagePath);
   await uploadBytes(ref, file, { contentType });
@@ -71,7 +77,8 @@ export async function uploadPageImage(pageId: string, file: File): Promise<strin
 
 /** Version snapshots of a page, newest first. */
 export function useVersions(pageId: string | undefined): Live<PageVersion[]> {
-  const q = useMemo(() => (pageId ? query(versionsCol(pageId), orderBy('savedAt', 'desc')) : null), [pageId]);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => (pageId ? query(versionsCol(pageId, wid), orderBy('savedAt', 'desc')) : null), [pageId, wid]);
   return useLiveQuery(q);
 }
 
@@ -136,12 +143,13 @@ export function duplicatePage(page: Page, rank: string): string {
  */
 export function savePage(page: Page, changes: { title?: string; content?: string }): Promise<void> {
   const actor = currentActor();
+  const wid = currentWorkspaceId();
   const version = page.version + 1;
   const title = changes.title ?? page.title;
   const content = changes.content ?? page.content;
-  const write = updateDoc(rawDoc('pages', page.id), { title, content, version, updatedAt: serverTimestamp(), updatedBy: actor });
-  const snap = getDocs(query(versionsCol(page.id), orderBy('savedAt', 'desc'), limit(1))).then(({ docs }) =>
-    startsVersionSession(docs[0]?.data(), actor) ? setDoc(newDoc('pages', page.id, 'versions'), snapshot(version, title, content)) : undefined,
+  const write = updateDoc(docIn(wid, 'pages', page.id), { title, content, version, updatedAt: serverTimestamp(), updatedBy: actor });
+  const snap = getDocs(query(versionsCol(page.id, wid), orderBy('savedAt', 'desc'), limit(1))).then(({ docs }) =>
+    startsVersionSession(docs[0]?.data(), actor) ? setDoc(newDocIn(wid, 'pages', page.id, 'versions'), snapshot(version, title, content)) : undefined,
   );
   return Promise.all([write, snap]).then(() => undefined);
 }
@@ -157,7 +165,7 @@ export function savePageVersioned(
   next: { title: string; content: string },
   opts?: PageSaveOptions,
 ): Promise<PageSaveResult> {
-  return savePageIfCurrent(db, pageId, baseVersion, next, currentActor(), opts);
+  return savePageIfCurrent(db, currentWorkspaceId(), pageId, baseVersion, next, currentActor(), opts);
 }
 
 /**
@@ -208,11 +216,12 @@ export function restorePage(page: Page, pages: readonly Page[]): Promise<void> {
 
 /** Permanently deletes a page, its subtree, and their versions, threads and presence entries. */
 export async function deletePageForever(page: Page, pages: readonly Page[]): Promise<void> {
+  const wid = currentWorkspaceId();
   const ids = subtreeIds(pages, page.id);
   const children = await Promise.all(
-    ids.flatMap((id) => [getDocs(versionsCol(id)), getDocs(threadsCol(id)), getDocs(collection(db, 'pages', id, 'presence'))]),
+    ids.flatMap((id) => [getDocs(versionsCol(id, wid)), getDocs(threadsCol(id, wid)), getDocs(colIn(wid, 'pages', id, 'presence'))]),
   );
-  const refs = [...children.flatMap((snap) => snap.docs.map((d) => d.ref)), ...ids.map((id) => rawDoc('pages', id))];
+  const refs = [...children.flatMap((snap) => snap.docs.map((d) => d.ref)), ...ids.map((id) => docIn(wid, 'pages', id))];
   await commitInChunks(refs.map((ref) => (batch) => batch.delete(ref)));
 }
 

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router';
 import { KeyRound, Plus, Tag, Users } from 'lucide-react';
 import { useProjects } from '../../data/projects';
+import { useWsPath } from '../../data/workspace';
 import { NewProjectForm } from '../../app/NewProjectForm';
 import { cx } from '../../lib/cx';
 import { Toasts } from '../board/toast';
@@ -11,9 +12,10 @@ import { ProjectSettings } from './ProjectSettings';
 import { TokensSettings } from './TokensSettings';
 import { PageTitle } from './ui';
 
-/** `/settings/*`: projects (name, work pages, columns, fields), labels, members, API tokens. */
+/** `/w/:slug/settings/*`: projects (name, work pages, columns, fields), labels, members, API tokens. */
 export default function SettingsPage() {
   const { data: projects, loading } = useProjects();
+  const ws = useWsPath();
   return (
     <div className="flex min-h-0 flex-1">
       <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-line px-2 py-3">
@@ -53,7 +55,7 @@ export default function SettingsPage() {
             <Route path="labels" element={<LabelsSettings />} />
             <Route path="members" element={<MembersSettings />} />
             <Route path="tokens" element={<TokensSettings />} />
-            <Route path="*" element={<Navigate to="/settings" replace />} />
+            <Route path="*" element={<Navigate to={ws('/settings')} replace />} />
           </Routes>
         </div>
       </div>
@@ -63,9 +65,10 @@ export default function SettingsPage() {
 }
 
 function Item({ to, icon, children }: { to: string; icon: ReactNode; children: ReactNode }) {
+  const ws = useWsPath();
   return (
     <NavLink
-      to={`/settings/${to}`}
+      to={ws(`/settings/${to}`)}
       end
       className={({ isActive }) =>
         cx(
@@ -91,10 +94,11 @@ function ProjectRoute() {
 
 function NewProject() {
   const navigate = useNavigate();
+  const ws = useWsPath();
   return (
     <div className="max-w-sm">
       <PageTitle title="New project" description="Projects hold a board of cards. The key prefixes every card (NI-12) and can't be changed later." />
-      <NewProjectForm onCreated={(key) => navigate(`/settings/projects/${key}`)} />
+      <NewProjectForm onCreated={(key) => navigate(ws(`/settings/projects/${key}`))} />
     </div>
   );
 }

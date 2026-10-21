@@ -2,6 +2,7 @@ import { memo, type CSSProperties, type MouseEvent, type Ref } from 'react';
 import { Archive, Calendar, CornerDownRight } from 'lucide-react';
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import type { Card } from '@shared/types';
+import { useWsPath } from '../../data/workspace';
 import { cx } from '../../lib/cx';
 import { justDragged } from './dragClock';
 import { formatDate, today } from './format';
@@ -47,6 +48,7 @@ export const CardTile = memo(function CardTile({
   ghost,
   overlay,
 }: CardTileProps) {
+  const ws = useWsPath();
   const due = card.dueDate;
   const now = due ? today() : '';
   const overdue = due && !done && due < now;
@@ -65,7 +67,7 @@ export const CardTile = memo(function CardTile({
   return (
     <a
       ref={dragRef}
-      href={`/p/${projectKey}/${card.key}`}
+      href={ws(`/p/${projectKey}/${card.key}`)}
       onClick={onClick}
       style={dragStyle}
       {...attributes}

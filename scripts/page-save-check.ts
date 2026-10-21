@@ -1,6 +1,8 @@
 /**
  * Conditional page saves (src/data/pageSave.ts) against the Firestore emulator, through
- * the real security rules, with the web SDK the SPA uses:
+ * the real security rules, with the web SDK the SPA uses. Seeds workspace `w1` with member
+ * `alice` (Admin SDK, bypassing the rules), then saves `workspaces/w1/pages/{id}` as alice;
+ * a non-member (`bob`) is denied:
  *
  *   npm run test:docs
  *
@@ -8,7 +10,6 @@
  * without FIRESTORE_EMULATOR_HOST.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { initializeApp } from 'firebase/app';
 import {
   collection,
@@ -21,9 +22,13 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  setLogLevel,
   terminate,
   updateDoc,
+  type Firestore,
 } from 'firebase/firestore';
+import { initializeApp as initAdmin } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore, Timestamp as AdminTimestamp } from 'firebase-admin/firestore';
 import type { Actor } from '../shared/types.js';
 import { savePageIfCurrent } from '../src/data/pageSave.js';
 
@@ -33,23 +38,42 @@ if (!host) {
   process.exit(1);
 }
 const [hostname, port] = host.split(':');
-// Sign in as the owner (hardcoded in firestore.rules), so the rules are exercised too.
-const ownerEmail = /function ownerEmail\(\)\s*\{\s*return '([^']+)'/.exec(readFileSync('firestore.rules', 'utf8'))?.[1];
-assert.ok(ownerEmail, 'owner email not found in firestore.rules');
+const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'demo-fira';
+const WID = 'w1';
+// The denied save below is expected; keep the SDK from logging it.
+setLogLevel('silent');
 
-const app = initializeApp({ projectId: process.env.GCLOUD_PROJECT ?? 'demo-fira', apiKey: 'fake' });
-const db = initializeFirestore(app, {});
-connectFirestoreEmulator(db, hostname, Number(port), {
-  mockUserToken: { user_id: 'alice', sub: 'alice', email: ownerEmail, email_verified: true },
+// Seed the workspace and alice's membership as the server would (clients can't write members).
+const adminDb = getAdminFirestore(initAdmin({ projectId: PROJECT_ID }));
+await adminDb.doc(`workspaces/${WID}`).set({ name: 'W1', slug: 'w-one', ownerUid: 'alice', createdBy: 'alice', createdAt: AdminTimestamp.now() });
+await adminDb.doc(`workspaces/${WID}/members/alice`).set({
+  uid: 'alice',
+  email: 'alice@example.com',
+  name: 'Alice',
+  role: 'owner',
+  joinedAt: AdminTimestamp.now(),
+  workspaceName: 'W1',
+  workspaceSlug: 'w-one',
 });
+
+/** A web SDK client signed in (emulator mock token) as `uid`, so the rules apply. */
+function client(uid: string): Firestore {
+  const app = initializeApp({ projectId: PROJECT_ID, apiKey: 'fake' }, uid);
+  const db = initializeFirestore(app, {});
+  connectFirestoreEmulator(db, hostname, Number(port), {
+    mockUserToken: { user_id: uid, sub: uid, email: `${uid}@example.com`, email_verified: true },
+  });
+  return db;
+}
+const db = client('alice');
 
 const alice: Actor = { type: 'user', id: 'alice', name: 'Alice' };
 const bob: Actor = { type: 'user', id: 'bob', name: 'Bob' };
 const agent: Actor = { type: 'token', id: 'tok1', name: 'agen' };
 
 const pageId = `p${Date.now()}`;
-const pageRef = doc(db, 'pages', pageId);
-const versions = () => getDocs(query(collection(db, 'pages', pageId, 'versions'), orderBy('savedAt', 'asc')));
+const pageRef = doc(db, 'workspaces', WID, 'pages', pageId);
+const versions = () => getDocs(query(collection(pageRef, 'versions'), orderBy('savedAt', 'asc')));
 const page = async () => (await getDoc(pageRef)).data()!;
 
 let passed = 0;
@@ -72,10 +96,10 @@ await setDoc(pageRef, {
   updatedAt: serverTimestamp(),
   updatedBy: alice,
 });
-await setDoc(doc(collection(db, 'pages', pageId, 'versions')), { version: 1, title: 'Plan', content: 'v1', savedAt: serverTimestamp(), actor: alice });
+await setDoc(doc(collection(pageRef, 'versions')), { version: 1, title: 'Plan', content: 'v1', savedAt: serverTimestamp(), actor: alice });
 
 await check('save based on the current version succeeds (v1 -> v2)', async () => {
-  const res = await savePageIfCurrent(db, pageId, 1, { title: 'Plan', content: 'alice v2' }, alice);
+  const res = await savePageIfCurrent(db, WID, pageId, 1, { title: 'Plan', content: 'alice v2' }, alice);
   assert.deepEqual(res, { ok: true, version: 2 });
   const p = await page();
   assert.equal(p.version, 2);
@@ -88,11 +112,11 @@ await check('save based on the current version succeeds (v1 -> v2)', async () =>
 await check('a concurrent write (e.g. the API) moves the page on: v2 -> v3', async () => {
   // What the API does: a versioned write + snapshot.
   await updateDoc(pageRef, { content: 'agent v3', version: 3, updatedAt: serverTimestamp(), updatedBy: agent });
-  await setDoc(doc(collection(db, 'pages', pageId, 'versions')), { version: 3, title: 'Plan', content: 'agent v3', savedAt: serverTimestamp(), actor: agent });
+  await setDoc(doc(collection(pageRef, 'versions')), { version: 3, title: 'Plan', content: 'agent v3', savedAt: serverTimestamp(), actor: agent });
 });
 
 await check('stale save (based on v2) is rejected and returns the current state, writing nothing', async () => {
-  const res = await savePageIfCurrent(db, pageId, 2, { title: 'Plan', content: 'alice edit on v2' }, alice);
+  const res = await savePageIfCurrent(db, WID, pageId, 2, { title: 'Plan', content: 'alice edit on v2' }, alice);
   assert.equal(res.ok, false);
   assert.ok(!res.ok);
   assert.equal(res.current.version, 3);
@@ -105,13 +129,13 @@ await check('stale save (based on v2) is rejected and returns the current state,
 });
 
 await check('stale save whose content equals the current state is a no-op success', async () => {
-  const res = await savePageIfCurrent(db, pageId, 2, { title: 'Plan', content: 'agent v3' }, alice);
+  const res = await savePageIfCurrent(db, WID, pageId, 2, { title: 'Plan', content: 'agent v3' }, alice);
   assert.deepEqual(res, { ok: true, version: 3 });
   assert.equal((await page()).version, 3);
 });
 
 await check('rebased save (based on v3) succeeds; new session snapshots it', async () => {
-  const res = await savePageIfCurrent(db, pageId, 3, { title: 'Plan', content: 'alice v4' }, alice);
+  const res = await savePageIfCurrent(db, WID, pageId, 3, { title: 'Plan', content: 'alice v4' }, alice);
   assert.deepEqual(res, { ok: true, version: 4 });
   const v = (await versions()).docs.map((d) => d.data());
   // v3 already had a snapshot (agent), so only v4 is added (different actor -> new session).
@@ -121,8 +145,8 @@ await check('rebased save (based on v3) succeeds; new session snapshots it', asy
 
 await check('two racing saves from the same base: exactly one wins', async () => {
   const [a, b] = await Promise.all([
-    savePageIfCurrent(db, pageId, 4, { title: 'Plan', content: 'alice v5' }, alice),
-    savePageIfCurrent(db, pageId, 4, { title: 'Plan', content: 'bob v5' }, bob),
+    savePageIfCurrent(db, WID, pageId, 4, { title: 'Plan', content: 'alice v5' }, alice),
+    savePageIfCurrent(db, WID, pageId, 4, { title: 'Plan', content: 'bob v5' }, bob),
   ]);
   assert.equal([a, b].filter((r) => r.ok).length, 1, JSON.stringify([a, b]));
   const p = await page();
@@ -133,14 +157,14 @@ await check('two racing saves from the same base: exactly one wins', async () =>
 await check('"keep mine" (snapshot: true) on top of an unsnapshotted edit keeps theirs in history', async () => {
   // Bob saves twice: the second save is in his session, so it has no snapshot.
   const v5 = (await page()).version as number;
-  assert.ok((await savePageIfCurrent(db, pageId, v5, { title: 'Plan', content: 'bob a' }, bob)).ok);
+  assert.ok((await savePageIfCurrent(db, WID, pageId, v5, { title: 'Plan', content: 'bob a' }, bob)).ok);
   const theirs = v5 + 2;
-  assert.deepEqual(await savePageIfCurrent(db, pageId, v5 + 1, { title: 'Plan', content: 'bob b' }, bob), { ok: true, version: theirs });
+  assert.deepEqual(await savePageIfCurrent(db, WID, pageId, v5 + 1, { title: 'Plan', content: 'bob b' }, bob), { ok: true, version: theirs });
   assert.ok(!(await versions()).docs.some((d) => d.data().version === theirs), 'bob b is not snapshotted yet');
   // Alice was based on an older version: rejected, then keeps hers on top.
-  const stale = await savePageIfCurrent(db, pageId, v5, { title: 'Plan', content: 'alice mine' }, alice);
+  const stale = await savePageIfCurrent(db, WID, pageId, v5, { title: 'Plan', content: 'alice mine' }, alice);
   assert.ok(!stale.ok && stale.current.version === theirs && stale.current.content === 'bob b');
-  const res = await savePageIfCurrent(db, pageId, theirs, { title: 'Plan', content: 'alice mine' }, alice, { snapshot: true });
+  const res = await savePageIfCurrent(db, WID, pageId, theirs, { title: 'Plan', content: 'alice mine' }, alice, { snapshot: true });
   assert.deepEqual(res, { ok: true, version: theirs + 1 });
   const v = (await versions()).docs.map((d) => d.data());
   const snapTheirs = v.find((x) => x.version === theirs);
@@ -153,23 +177,36 @@ await check('"keep mine" (snapshot: true) on top of an unsnapshotted edit keeps 
 
 await check('title-only change is versioned the same way', async () => {
   const cur = (await page()).version as number;
-  const stale = await savePageIfCurrent(db, pageId, cur - 1, { title: 'Renamed', content: 'alice mine' }, alice);
+  const stale = await savePageIfCurrent(db, WID, pageId, cur - 1, { title: 'Renamed', content: 'alice mine' }, alice);
   assert.ok(!stale.ok);
-  const res = await savePageIfCurrent(db, pageId, cur, { title: 'Renamed', content: 'alice mine' }, alice);
+  const res = await savePageIfCurrent(db, WID, pageId, cur, { title: 'Renamed', content: 'alice mine' }, alice);
   assert.deepEqual(res, { ok: true, version: cur + 1 });
   assert.equal((await page()).title, 'Renamed');
 });
 
 await check('force (version restore) saves on top of whatever is current', async () => {
   const cur = (await page()).version as number;
-  const res = await savePageIfCurrent(db, pageId, 1, { title: 'Plan', content: 'v1' }, alice, { force: true, snapshot: true });
+  const res = await savePageIfCurrent(db, WID, pageId, 1, { title: 'Plan', content: 'v1' }, alice, { force: true, snapshot: true });
   assert.deepEqual(res, { ok: true, version: cur + 1 });
   const v = (await versions()).docs.map((d) => d.data().version);
   assert.deepEqual(v.slice(-2), [cur, cur + 1]);
 });
 
 await check('missing page rejects', async () => {
-  await assert.rejects(savePageIfCurrent(db, 'nope', 1, { title: '', content: '' }, alice), /not found/);
+  await assert.rejects(savePageIfCurrent(db, WID, 'nope', 1, { title: '', content: '' }, alice), /not found/);
+});
+
+await check('a non-member is denied (permission-denied), and nothing is written', async () => {
+  const before = await page();
+  const bobDb = client('bob');
+  await assert.rejects(
+    savePageIfCurrent(bobDb, WID, pageId, before.version as number, { title: 'Plan', content: 'bob was here' }, bob),
+    (err: { code?: string }) => err.code === 'permission-denied',
+  );
+  const after = await page();
+  assert.equal(after.version, before.version);
+  assert.equal(after.content, before.content);
+  await terminate(bobDb);
 });
 
 await terminate(db);

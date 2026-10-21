@@ -16,7 +16,8 @@ import { startsVersionSession } from '@shared/pages';
 /**
  * Conditional ("compare-and-set") page saves. Takes the Firestore instance as a
  * parameter so it runs unchanged against the emulator in scripts/page-save-check.ts;
- * the SPA calls it through `savePageVersioned` in ./pages.
+ * the SPA calls it through `savePageVersioned` in ./pages. Pages live at
+ * `workspaces/{workspaceId}/pages/{pageId}`.
  */
 
 /** The versioned part of a page as stored on the server. */
@@ -57,14 +58,15 @@ export interface PageSaveOptions {
  */
 export async function savePageIfCurrent(
   db: Firestore,
+  workspaceId: string,
   pageId: string,
   baseVersion: number,
   next: { title: string; content: string },
   actor: Actor,
   opts: PageSaveOptions = {},
 ): Promise<PageSaveResult> {
-  const pageRef = doc(db, 'pages', pageId);
-  const versions = collection(db, 'pages', pageId, 'versions');
+  const pageRef = doc(db, 'workspaces', workspaceId, 'pages', pageId);
+  const versions = collection(pageRef, 'versions');
   // Queries can't run inside a client transaction; the latest snapshot only decides
   // whether to snapshot, so reading it just before is fine.
   const latestSnap = await getDocs(query(versions, orderBy('savedAt', 'desc'), limit(1)));

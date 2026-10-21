@@ -1,75 +1,68 @@
-import { FirebaseError } from 'firebase/app';
-import type { User } from 'firebase/auth';
-import { deleteDoc, getDoc, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { query } from 'firebase/firestore';
 import { useMemo } from 'react';
-import type { Member } from '@shared/types';
-import { normalizeEmail } from '@shared/actors';
-import { membersCol, rawDoc } from './db';
-import { useLiveQuery, type Live } from './live';
+import type { Invite, Member, Membership } from '@shared/types';
+import { ROLE_RANK } from '@shared/workspaces';
+import { invitesCol, membersCol, myInvitesQuery, myMembershipsQuery } from './db';
+import { useLiveQuery, useLiveQuerySynced, type Live, type LiveSynced } from './live';
+import { useWorkspaceId } from './workspace';
 
-const allMembers = query(membersCol);
+/**
+ * Members and invites are read live from Firestore and changed only through the API
+ * (src/data/workspaces.ts).
+ */
 
-/** Everyone who may use fira: the owner first, then by name (or email). */
+/** Members of the active workspace: the owner, then admins, then members, each by name. */
 export function useMembers(): Live<Member[]> {
-  const live = useLiveQuery(allMembers);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => query(membersCol(wid)), [wid]);
+  const live = useLiveQuery(q);
   const data = useMemo(
     () =>
       [...live.data].sort(
-        (a, b) => Number(b.role === 'owner') - Number(a.role === 'owner') || (a.name ?? a.email).localeCompare(b.name ?? b.email),
+        (a, b) => ROLE_RANK[b.role] - ROLE_RANK[a.role] || (a.name || a.email).localeCompare(b.name || b.email),
       ),
     [live.data],
   );
   return { ...live, data };
 }
 
-/** Owner only (enforced by the rules): invites a Google account by email. */
-export function addMember(email: string, addedBy: string): Promise<void> {
-  const id = normalizeEmail(email);
-  return setDoc(rawDoc('members', id), { email: id, role: 'member', addedAt: serverTimestamp(), addedBy: normalizeEmail(addedBy) });
-}
-
-/** Owner only: removes a member. Their access (app, rules, API tokens) ends immediately. */
-export function removeMember(email: string): Promise<void> {
-  return deleteDoc(rawDoc('members', normalizeEmail(email)));
+/** Pending invites of the active workspace, newest first. */
+export function useInvites(): Live<Invite[]> {
+  const wid = useWorkspaceId();
+  const q = useMemo(() => query(invitesCol(wid)), [wid]);
+  const live = useLiveQuery(q);
+  const data = useMemo(() => [...live.data].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')), [live.data]);
+  return { ...live, data };
 }
 
 /**
- * Watches whether `email` is on the invite list. Calls `onChange(true)` once the member doc
- * exists (possibly from the local cache, for an instant start) and `onChange(false)` when the
- * server says it doesn't, or the rules deny reading it (not a member). Returns an unsubscribe.
+ * The signed-in user's workspaces (one collection-group query over member docs), sorted by
+ * workspace name. `loading` stays true while the cache has nothing yet; `fromCache` says the
+ * list may still miss a just-joined workspace.
  */
-export function watchMembership(email: string, onChange: (member: boolean) => void): () => void {
-  return onSnapshot(
-    rawDoc('members', normalizeEmail(email)),
-    (snap) => {
-      if (snap.exists()) onChange(true);
-      else if (!snap.metadata.fromCache) onChange(false);
-    },
-    (err) => {
-      if (!(err instanceof FirebaseError) || err.code !== 'permission-denied') reportError(err);
-      onChange(false);
-    },
+export function useMyMemberships(uid: string): LiveSynced<Membership[]> {
+  const q = useMemo(() => myMembershipsQuery(uid), [uid]);
+  const live = useLiveQuerySynced(q);
+  const data = useMemo(
+    () =>
+      live.data
+        .filter((m) => m.workspaceId !== '')
+        .sort((a, b) => a.workspaceName.localeCompare(b.workspaceName) || a.workspaceSlug.localeCompare(b.workspaceSlug)),
+    [live.data],
   );
+  return { ...live, data };
 }
 
-/**
- * Records the signed-in user's profile (uid, name, photo, last sign-in) on their member doc.
- * The owner's doc is created on first sign-in with role `owner`; members can only update theirs.
- */
-export async function recordSignIn(user: User, isOwner: boolean): Promise<void> {
-  if (!user.email) return;
-  const id = normalizeEmail(user.email);
-  const signedIn = user.metadata.lastSignInTime ? new Date(user.metadata.lastSignInTime) : new Date();
-  const profile = {
-    uid: user.uid,
-    name: user.displayName ?? undefined,
-    photoURL: user.photoURL ?? undefined,
-    lastSignInAt: Timestamp.fromDate(signedIn),
-  };
-  const ref = rawDoc('members', id);
-  if (isOwner && !(await getDoc(ref)).exists()) {
-    await setDoc(ref, { email: id, role: 'owner', addedAt: serverTimestamp(), addedBy: id, ...profile });
-  } else {
-    await updateDoc(ref, profile);
-  }
+/** Pending invites to the signed-in user's email, across workspaces, newest first. */
+export function useMyInvites(email: string): LiveSynced<Invite[]> {
+  const q = useMemo(() => myInvitesQuery(email), [email]);
+  const live = useLiveQuerySynced(q);
+  const data = useMemo(
+    () =>
+      live.data
+        .filter((i) => i.workspaceId !== '')
+        .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
+    [live.data],
+  );
+  return { ...live, data };
 }

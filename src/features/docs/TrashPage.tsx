@@ -2,14 +2,16 @@ import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { FileText, LayoutTemplate, RotateCcw, Trash2 } from 'lucide-react';
 import { deletePageForever, restorePage, usePages } from '../../data/pages';
+import { useWsPath } from '../../data/workspace';
 import { Button } from '../../components/Button';
 import { pageTitle } from './actions';
 import { ConfirmButton } from './ConfirmButton';
 import { timeAgo } from './format';
 
-/** `/trash`: pages trashed together with their subtree are listed once, at the top-most trashed page. */
+/** `/w/:slug/trash`: pages trashed together with their subtree are listed once, at the top-most trashed page. */
 export default function TrashPage() {
   const { data: pages, loading } = usePages();
+  const ws = useWsPath();
   const roots = useMemo(() => {
     const byId = new Map(pages.map((p) => [p.id, p]));
     return pages
@@ -48,7 +50,7 @@ export default function TrashPage() {
                   {page.icon ?? (page.isTemplate ? <LayoutTemplate size="0.9375rem" /> : <FileText size="0.9375rem" />)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <Link to={`/d/${page.id}`} className="block truncate text-base font-medium hover:underline">
+                  <Link to={ws(`/d/${page.id}`)} className="block truncate text-base font-medium hover:underline">
                     {pageTitle(page)}
                   </Link>
                   <div className="text-sm text-fg-faint">

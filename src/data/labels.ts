@@ -3,15 +3,16 @@ import { useMemo } from 'react';
 import type { Card, Label, LabelColor } from '@shared/types';
 import { colorFor, findLabel } from '@shared/labels';
 import { currentActor } from './actor';
-import { cardsCol, labelsCol, newDoc, rawDoc } from './db';
+import { cardsCol, docIn, labelsCol, newDoc, rawDoc } from './db';
 import { useLiveQuery, type Live } from './live';
 import { commitInChunks, writeActivity } from './writes';
+import { currentWorkspaceId, useWorkspaceId } from './workspace';
 
-const allLabels = query(labelsCol);
-
-/** All labels, sorted by name. */
+/** All labels of the workspace, sorted by name. */
 export function useLabels(): Live<Label[]> {
-  const live = useLiveQuery(allLabels);
+  const wid = useWorkspaceId();
+  const q = useMemo(() => query(labelsCol(wid)), [wid]);
+  const live = useLiveQuery(q);
   const data = useMemo(() => [...live.data].sort((a, b) => a.name.localeCompare(b.name)), [live.data]);
   return { ...live, data };
 }
@@ -39,24 +40,27 @@ export async function renameLabel(existing: readonly Label[], label: Label, name
   const trimmed = name.trim();
   const clash = findLabel(existing, trimmed);
   if (clash && clash.id !== label.id) throw new Error(`Label "${clash.name}" already exists`);
-  await updateDoc(rawDoc('labels', label.id), { name: trimmed });
-  await rewriteCardLabels(label.name, (labels) => labels.map((l) => (l === label.name ? trimmed : l)));
+  const wid = currentWorkspaceId();
+  await updateDoc(docIn(wid, 'labels', label.id), { name: trimmed });
+  await rewriteCardLabels(wid, label.name, (labels) => labels.map((l) => (l === label.name ? trimmed : l)));
 }
 
 /** Deletes a label and removes it from every card (logged as `labels` activity). */
 export async function deleteLabel(label: Label): Promise<void> {
-  await deleteDoc(rawDoc('labels', label.id));
-  await rewriteCardLabels(label.name, (labels) => labels.filter((l) => l !== label.name));
+  const wid = currentWorkspaceId();
+  await deleteDoc(docIn(wid, 'labels', label.id));
+  await rewriteCardLabels(wid, label.name, (labels) => labels.filter((l) => l !== label.name));
 }
 
-async function rewriteCardLabels(name: string, next: (labels: string[]) => string[]): Promise<void> {
+/** Takes the workspace id captured before the first await, so a workspace switch meanwhile can't redirect the writes. */
+async function rewriteCardLabels(wid: string, name: string, next: (labels: string[]) => string[]): Promise<void> {
   const actor = currentActor();
-  const cards: Card[] = (await getDocs(query(cardsCol, where('labels', 'array-contains', name)))).docs.map((d) => d.data());
+  const cards: Card[] = (await getDocs(query(cardsCol(wid), where('labels', 'array-contains', name)))).docs.map((d) => d.data());
   await commitInChunks(
     cards.map((card) => (batch) => {
       const labels = next(card.labels);
-      batch.update(rawDoc('cards', card.id), { labels, updatedAt: serverTimestamp(), updatedBy: actor });
-      writeActivity(batch, card.id, [{ kind: 'labels', from: card.labels, to: labels }], actor);
+      batch.update(docIn(wid, 'cards', card.id), { labels, updatedAt: serverTimestamp(), updatedBy: actor });
+      writeActivity(batch, card.id, [{ kind: 'labels', from: card.labels, to: labels }], actor, wid);
     }),
     2,
   );
