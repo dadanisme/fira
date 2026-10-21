@@ -10,8 +10,9 @@ import { route } from '../_lib/router.js';
 import { fromDoc } from '../_lib/serialize.js';
 import { cardRefByKey, cardResponse, col, projectById, versionDoc, writeActivity } from '../_lib/store.js';
 import { storeUpload } from '../_lib/uploads.js';
-import { cardAttachmentPath } from '../../shared/workspaces.js';
+import { cardAttachmentPath, cardAttachmentPrefix, isOwnAttachmentPath } from '../../shared/workspaces.js';
 import { onlyKeys, optString, queryList } from '../_lib/validate.js';
+import { assertLiveWorkspace } from '../_lib/workspaces.js';
 
 const URL_TTL_MS = 60 * 60 * 1000;
 const MAX_COMMENT = 50_000;
@@ -20,7 +21,14 @@ async function cardOf(wid: string, key: string): Promise<Card> {
   return fromDoc<Card>(await (await cardRefByKey(wid, key)).get());
 }
 
-/** Attachment with a signed download URL valid for one hour. */
+/**
+ * Whether the record points at its own object (`workspaces/{wid}/cards/{cardId}/{id}/...`). The
+ * rules enforce this on client writes; checked again here because the Admin SDK signs and deletes
+ * whatever path it is given, in any workspace.
+ */
+const ownPath = (wid: string, cardId: string, a: Attachment) => isOwnAttachmentPath(a.storagePath, cardAttachmentPrefix(wid, cardId, a.id));
+
+/** Attachment with a signed download URL valid for one hour (only for a path checked by `ownPath`). */
 async function withUrl(attachment: Attachment) {
   const expires = Date.now() + URL_TTL_MS;
   const [url] = await bucket().file(attachment.storagePath).getSignedUrl({ action: 'read', expires });
@@ -77,8 +85,9 @@ export const cardItemRoutes = [
   route('GET', '/cards/:key/attachments', 'token', async ({ params, query, workspaceId: wid }) => {
     const card = await cardOf(wid, params.key);
     const snap = await col.attachments(wid, card.id).orderBy('createdAt').get();
+    // Records with a forged storagePath are left out: never sign a URL for someone else's file.
     const page = paginate(
-      snap.docs.map((d) => fromDoc<Attachment>(d)),
+      snap.docs.map((d) => fromDoc<Attachment>(d)).filter((a) => ownPath(wid, card.id, a)),
       query,
     );
     return { ...page, items: await Promise.all(page.items.map(withUrl)) };
@@ -105,7 +114,8 @@ export const cardItemRoutes = [
     batch.delete(ref);
     writeActivity(batch, wid, card.id, [{ kind: 'attachment', from: attachment.name, to: null }], actor);
     await batch.commit();
-    await bucket().file(attachment.storagePath).delete({ ignoreNotFound: true });
+    // A forged record is removed, but the object it names is never touched.
+    if (ownPath(wid, card.id, attachment)) await bucket().file(attachment.storagePath).delete({ ignoreNotFound: true });
     return noContent();
   }),
 
@@ -138,7 +148,9 @@ export const cardItemRoutes = [
     const title = workPageTitle(before);
     const content = template?.content ?? '';
     const result = await firestore().runTransaction(async (tx) => {
-      const card = fromDoc<Card>(await tx.get(cardRef));
+      const [ws, cardSnap] = await tx.getAll(col.workspaces().doc(wid), cardRef);
+      assertLiveWorkspace(ws);
+      const card = fromDoc<Card>(cardSnap);
       if (card.pageId) return card;
       tx.set(pageRef, {
         title,

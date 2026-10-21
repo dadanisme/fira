@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import type { Attachment } from '@shared/types';
 import { db, storage } from '../lib/firebase';
 import { currentActor } from './actor';
-import { LIMITS, cardAttachmentPath } from '@shared/workspaces';
+import { LIMITS, cardAttachmentPath, cardAttachmentPrefix, isOwnAttachmentPath } from '@shared/workspaces';
 import { attachmentsCol, newDocIn, rawDoc, type Stored } from './db';
 import { useLiveQuery, type Live } from './live';
 import { writeActivity } from './writes';
@@ -45,15 +45,26 @@ export async function uploadAttachment(cardId: string, file: File): Promise<void
   await batch.commit();
 }
 
-/** Deletes the record (logged as `attachment` from = file name), then the stored file. */
+/**
+ * Whether the record points at its own object. A record naming another path (planted before the
+ * rules checked it) must never make this client read or delete a file it can reach in some other
+ * workspace.
+ */
+function ownPath(cardId: string, attachment: Attachment): boolean {
+  return isOwnAttachmentPath(attachment.storagePath, cardAttachmentPrefix(currentWorkspaceId(), cardId, attachment.id));
+}
+
+/** Deletes the record (logged as `attachment` from = file name), then the stored file (only its own). */
 export async function deleteAttachment(cardId: string, attachment: Attachment): Promise<void> {
+  const own = ownPath(cardId, attachment);
   const batch = writeBatch(db);
   batch.delete(rawDoc('cards', cardId, 'attachments', attachment.id));
   writeActivity(batch, cardId, [{ kind: 'attachment', from: attachment.name, to: null }], currentActor());
   await batch.commit();
-  await deleteObject(storageRef(storage, attachment.storagePath));
+  if (own) await deleteObject(storageRef(storage, attachment.storagePath));
 }
 
-export function attachmentUrl(attachment: Attachment): Promise<string> {
+export function attachmentUrl(cardId: string, attachment: Attachment): Promise<string> {
+  if (!ownPath(cardId, attachment)) return Promise.reject(new Error('This attachment points outside its card'));
   return getDownloadURL(storageRef(storage, attachment.storagePath));
 }

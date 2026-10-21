@@ -9,6 +9,8 @@
  * content is open to members (a `workspaces/{wid}/members/{uid}` doc exists), workspaces,
  * members and invites are server-only writes, slugs and tokens have no client access, and the
  * "my workspaces" / "my invites" collection-group queries only return the caller's own docs.
+ * Attachment records must name their own Storage object, and a workspace flagged `deleting`
+ * takes no content writes.
  */
 import assert from 'node:assert/strict';
 import { deleteApp, initializeApp as initClient, type FirebaseApp } from 'firebase/app';
@@ -164,6 +166,15 @@ const x = await signIn('x', 'X@example.com'); // invite lookups compare the lowe
 const u = await signIn('u', 'u@example.com', { verified: false });
 
 const W = (wid: string, path = '') => `workspaces/${wid}${path && `/${path}`}`;
+/** An attachment record; `storagePath` defaults to its own object. */
+const attachment = (wid: string, coll: 'cards' | 'pages', id: string, aid: string, storagePath: unknown = `workspaces/${wid}/${coll}/${id}/${aid}/f.png`) => ({
+  name: 'f.png',
+  size: 1,
+  contentType: 'image/png',
+  storagePath,
+  uploadedBy: { type: 'user', id: 'm', name: 'm' },
+  createdAt: new Date(),
+});
 
 // ---------------------------------------------------------------- content
 
@@ -181,11 +192,13 @@ await test('member reads and writes content and every subcollection in their wor
   await allowed('label', () => setDoc(doc(db, W(A, 'labels/l1')), { name: 'L', color: 'red' }));
   await allowed('update page', () => updateDoc(doc(db, W(A, 'pages/p1')), { content: 'x', version: 2 }));
   for (const sub of ['comments', 'activity', 'attachments']) {
-    await allowed(`card ${sub} write`, () => setDoc(doc(db, W(A, `cards/c1/${sub}/s1`)), { a: 1 }));
+    const data = sub === 'attachments' ? attachment(A, 'cards', 'c1', 's1') : { a: 1 };
+    await allowed(`card ${sub} write`, () => setDoc(doc(db, W(A, `cards/c1/${sub}/s1`)), data));
     await allowed(`card ${sub} read`, () => getDocsFromServer(collection(db, W(A, `cards/c1/${sub}`))));
   }
   for (const sub of ['versions', 'presence', 'threads', 'attachments']) {
-    await allowed(`page ${sub} write`, () => setDoc(doc(db, W(A, `pages/p1/${sub}/s1`)), { a: 1 }));
+    const data = sub === 'attachments' ? attachment(A, 'pages', 'p1', 's1') : { a: 1 };
+    await allowed(`page ${sub} write`, () => setDoc(doc(db, W(A, `pages/p1/${sub}/s1`)), data));
     await allowed(`page ${sub} read`, () => getDocsFromServer(collection(db, W(A, `pages/p1/${sub}`))));
     await allowed(`page ${sub} delete`, () => deleteDoc(doc(db, W(A, `pages/p1/${sub}/s1`))));
   }
@@ -214,6 +227,57 @@ await test('a stranger can access nothing in a workspace', async () => {
   await denied('page version', () => setDoc(doc(db, W(A, 'pages/p1/versions/v9')), { version: 9 }));
   await denied('projects', () => getDocsFromServer(collection(db, W(A, 'projects'))));
   await denied('join by writing own member doc', () => setDoc(doc(db, W(A, 'members/s')), member(A, 's', 'member')));
+});
+
+await test('attachment records must point at their own object (no forged storagePath)', async () => {
+  const { db } = m;
+  for (const coll of ['cards', 'pages'] as const) {
+    const id = coll === 'cards' ? 'c1' : 'p1';
+    const at = (aid: string) => doc(db, W(A, `${coll}/${id}/attachments/${aid}`));
+    const forged = (what: string, path: unknown) => denied(`${coll}: ${what}`, () => setDoc(at('f1'), attachment(A, coll, id, 'f1', path)));
+    await allowed(`${coll}: own path`, () => setDoc(at('f1'), attachment(A, coll, id, 'f1')));
+    await allowed(`${coll}: own path, name with a slash`, () => setDoc(at('f2'), attachment(A, coll, id, 'f2', `workspaces/${A}/${coll}/${id}/f2/x/y.png`)));
+    await forged('another workspace', `workspaces/${B}/${coll}/${id}/f1/secret.pdf`);
+    await forged("another workspace's card attachment", `workspaces/${B}/cards/c1/a1/b.txt`);
+    await forged(coll === 'cards' ? 'the pages area' : 'the cards area', `workspaces/${A}/${coll === 'cards' ? 'pages' : 'cards'}/${id}/f1/x.png`);
+    await forged('another card/page', `workspaces/${A}/${coll}/other/f1/x.png`);
+    await forged('another attachment id', `workspaces/${A}/${coll}/${id}/f2/x.png`);
+    await forged('no file name', `workspaces/${A}/${coll}/${id}/f1/`);
+    await forged('the prefix only', `workspaces/${A}/${coll}/${id}/f1`);
+    await forged('the old root layout', `${coll === 'cards' ? 'attachments' : 'pages'}/${id}/f1/old.png`);
+    await forged('a leading slash', `/workspaces/${A}/${coll}/${id}/f1/x.png`);
+    await forged('not a string', 42);
+    await denied(`${coll}: missing storagePath`, () => setDoc(at('f3'), { name: 'x', size: 1 }));
+    await denied(`${coll}: update to a forged path`, () => updateDoc(at('f1'), { storagePath: `workspaces/${B}/cards/c1/a1/b.txt` }));
+    await allowed(`${coll}: update other fields`, () => updateDoc(at('f1'), { name: 'renamed.png' }));
+    await allowed(`${coll}: delete`, () => deleteDoc(at('f1')));
+  }
+});
+
+await test('a workspace flagged deleting (or without its doc) takes no content writes; reads still work', async () => {
+  const C = 'wsC';
+  const G = 'wsGhost';
+  await adminDb.doc(W(C)).set({ ...workspace('wsc', 'm'), deleting: true });
+  await adminDb.doc(W(C, 'members/m')).set(member(C, 'm', 'owner'));
+  await adminDb.doc(W(C, 'cards/c1')).set({ title: 'Card', labels: [] });
+  await adminDb.doc(W(G, 'members/m')).set(member(G, 'm', 'member')); // workspace doc already gone
+  const { db } = m;
+  try {
+    await allowed('read card', () => getDocFromServer(doc(db, W(C, 'cards/c1'))));
+    await denied('create card', () => setDoc(doc(db, W(C, 'cards/c2')), { title: 'x' }));
+    await denied('update card', () => updateDoc(doc(db, W(C, 'cards/c1')), { title: 'x' }));
+    await denied('delete card', () => deleteDoc(doc(db, W(C, 'cards/c1'))));
+    await denied('comment', () => setDoc(doc(db, W(C, 'cards/c1/comments/x')), { body: 'x' }));
+    await denied('attachment', () => setDoc(doc(db, W(C, 'cards/c1/attachments/f1')), attachment(C, 'cards', 'c1', 'f1')));
+    await denied('page', () => setDoc(doc(db, W(C, 'pages/p9')), { title: 'x' }));
+    await denied('ghost workspace card', () => setDoc(doc(db, W(G, 'cards/c1')), { title: 'x' }));
+    await adminDb.doc(W(C)).update({ deleting: false });
+    await allowed('writes again once the flag is cleared', () => updateDoc(doc(db, W(C, 'cards/c1')), { title: 'ok' }));
+  } finally {
+    // m's member docs here would show up in the "my workspaces" test below.
+    await adminDb.recursiveDelete(adminDb.doc(W(C)));
+    await adminDb.recursiveDelete(adminDb.doc(W(G)));
+  }
 });
 
 // ---------------------------------------------------------------- server-only docs

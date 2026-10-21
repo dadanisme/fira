@@ -25,6 +25,9 @@ export const col = {
   invites: (wid: string) => wsRef(wid).collection('invites'),
   slugs: () => firestore().collection('slugs'),
   tokens: () => firestore().collection('tokens'),
+  /** Server-only invite send limits (no client rules): see reserveInviteSend in workspaces.ts. */
+  inviteSends: () => firestore().collection('inviteSends'),
+  inviteQuotas: () => firestore().collection('inviteQuotas'),
   projects: (wid: string) => wsRef(wid).collection('projects'),
   labels: (wid: string) => wsRef(wid).collection('labels'),
   cards: (wid: string) => wsRef(wid).collection('cards'),

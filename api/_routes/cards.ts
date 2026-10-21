@@ -49,6 +49,7 @@ import {
   queryList,
   reqText,
 } from '../_lib/validate.js';
+import { assertLiveWorkspace } from '../_lib/workspaces.js';
 
 const MAX_TITLE = 500;
 const SORTS = ['created', '-created', 'updated', '-updated', 'rank'] as const;
@@ -223,7 +224,9 @@ async function createCard(wid: string, body: Record<string, unknown>, actor: Car
   const projectRef = col.projects(wid).doc(project.id);
 
   await firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(projectRef);
+    // One getAll: parallel first reads can race the transaction's begin under contention.
+    const [ws, snap] = await tx.getAll(col.workspaces().doc(wid), projectRef);
+    assertLiveWorkspace(ws);
     if (!snap.exists) throw notFound(`Project ${project.key} not found`);
     const existingLabels = labelsFrom((await tx.get(col.labels(wid))).docs);
     // Read after the project lock, so concurrent creates in the same column get distinct ranks.

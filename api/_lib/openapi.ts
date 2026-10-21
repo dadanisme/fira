@@ -321,10 +321,12 @@ Every error has the same shape: a machine-readable \`code\` and a \`message\` wr
 | 409 | \`version_conflict\` | A versioned write based on a stale version (see below) |
 | 409 | \`conflict\` | The card already has a work page |
 | 409 | \`slug_taken\`, \`already_member\`, \`already_invited\` | Workspace management: the slug is used by another workspace; the email is already a member or invited |
+| 409 | \`workspace_deleting\` | The workspace is being deleted: no new content, invites, accepts or tokens, and its API tokens stop working |
 | 413 | \`payload_too_large\` | Attachment over 4 MB |
 | 422 | \`unprocessable\` | Well-formed but invalid: unknown status or field, value not allowed by a field, broken epic/card/subtask hierarchy, empty title or comment |
 | 422 | \`workspace_limit\`, \`seat_limit\` | A user owns at most 3 workspaces; a workspace has at most 50 seats (members + pending invites) |
-| 429 | \`too_many_requests\` | An invite email was resent less than a minute ago |
+| 429 | \`too_many_requests\` | An invite email went to that address from this workspace less than a minute ago (also after a revoke and re-invite) |
+| 429 | \`invite_limit\` | You already sent ${LIMITS.inviteSendsPerDay} invite emails today (UTC), across all workspaces |
 | 500 | \`internal\` | A bug on fira's side |
 
 ## Pagination
@@ -1167,7 +1169,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Invites'],
         operationId: 'createInvite',
         summary: 'Invite by email',
-        description: `Admins and the owner. Creates a pending invite (role \`member\` by default) and emails it. A failed email keeps the invite: the response has \`emailSent: false\` and the invite \`emailStatus: failed\`, so it can be resent. A workspace has at most ${LIMITS.seats} seats, members plus pending invites (422 \`seat_limit\`). The invitee accepts by signing in with exactly that email.`,
+        description: `Admins and the owner. Creates a pending invite (role \`member\` by default) and emails it. A failed email keeps the invite: the response has \`emailSent: false\` and the invite \`emailStatus: failed\`, so it can be resent. A workspace has at most ${LIMITS.seats} seats, members plus pending invites (422 \`seat_limit\`). Invite emails are rate limited: one per address per workspace per minute, kept across revoke and re-invite (429 \`too_many_requests\`), and ${LIMITS.inviteSendsPerDay} per inviter per UTC day (429 \`invite_limit\`); a refused request creates no invite. The invitee accepts by signing in with exactly that email.`,
         security: [{ firebaseIdToken: [] }],
         requestBody: body(
           { type: 'object', required: ['email'], properties: { email: { type: 'string', format: 'email' }, role: { type: 'string', enum: INVITE_ROLES, default: 'member' } } },
@@ -1179,7 +1181,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
             description: '`already_member` or `already_invited`',
             content: json(ref('Error'), errorExample('already_invited', 'bob@example.com is already invited')),
           },
-          ...errors(400, 401, 403, 404, 422),
+          ...errors(400, 401, 403, 404, 422, 429),
         },
       },
     },
@@ -1200,7 +1202,7 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
         tags: ['Invites'],
         operationId: 'resendInvite',
         summary: 'Resend an invite email',
-        description: 'Admins and the owner. Sends the invite email again, at most once a minute (429).',
+        description: `Admins and the owner. Sends the invite email again: at most once a minute per address (429 \`too_many_requests\`) and within the inviter's ${LIMITS.inviteSendsPerDay} invite emails a day (429 \`invite_limit\`).`,
         security: [{ firebaseIdToken: [] }],
         responses: { 200: ok('The invite and whether its email went out', ref('InviteResult'), { invite: inviteExample, emailSent: true }), ...errors(401, 403, 404, 429) },
       },
@@ -1419,6 +1421,8 @@ curl -X PATCH ${BASE}/pages/$PAGE -H "Authorization: Bearer $FIRA_TOKEN" \\
                   'workspace_limit',
                   'seat_limit',
                   'too_many_requests',
+                  'invite_limit',
+                  'workspace_deleting',
                   'internal',
                 ],
                 description: 'Machine-readable error code',

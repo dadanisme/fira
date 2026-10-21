@@ -9,6 +9,8 @@ import { paginate } from '../_lib/paginate.js';
 import { route } from '../_lib/router.js';
 import { tokenJson } from '../_lib/serialize.js';
 import { col } from '../_lib/store.js';
+import { firestore } from '../_lib/admin.js';
+import { assertLiveWorkspace } from '../_lib/workspaces.js';
 
 const millis = (d: DocumentSnapshot) => (d.get('createdAt') as Timestamp | undefined)?.toMillis() ?? 0;
 
@@ -34,17 +36,22 @@ export const tokenRoutes = [
     }
     const secret = generateSecret();
     const ref = col.tokens().doc();
-    await ref.set({
-      workspaceId: wid,
-      name,
-      color: (body.color as LabelColor | undefined) ?? colorFor(name),
-      hash: hashSecret(secret),
-      prefix: secret.slice(0, 8),
-      createdAt: FieldValue.serverTimestamp(),
-      revoked: false,
-      userId: member.uid,
-      userEmail: member.email,
-      userName: member.name,
+    const wsRef = col.workspaces().doc(wid);
+    await firestore().runTransaction(async (tx) => {
+      // A token made after the deletion swept the tokens would outlive the workspace.
+      assertLiveWorkspace(await tx.get(wsRef));
+      tx.create(ref, {
+        workspaceId: wid,
+        name,
+        color: (body.color as LabelColor | undefined) ?? colorFor(name),
+        hash: hashSecret(secret),
+        prefix: secret.slice(0, 8),
+        createdAt: FieldValue.serverTimestamp(),
+        revoked: false,
+        userId: member.uid,
+        userEmail: member.email,
+        userName: member.name,
+      });
     });
     const result: CreateTokenResult = { token: tokenJson(await ref.get()), secret };
     return created(result);

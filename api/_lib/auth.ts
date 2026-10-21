@@ -5,7 +5,7 @@ import type { Actor, WorkspaceRole } from '../../shared/types.js';
 import { randomId } from '../../shared/ids.js';
 import { isAdminRole } from '../../shared/workspaces.js';
 import { adminAuth, firestore } from './admin.js';
-import { forbidden, notFound, unauthorized } from './http.js';
+import { forbidden, HttpError, notFound, unauthorized } from './http.js';
 
 const SECRET_RE = /^fira_[0-9A-Za-z]{32}$/;
 const LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
@@ -106,8 +106,19 @@ export async function tokenAuth(req: VercelRequest): Promise<TokenCaller> {
   const workspaceId = doc.get('workspaceId') as string | undefined;
   const userId = doc.get('userId') as string | undefined;
   if (!workspaceId || !userId) throw unauthorized('Invalid or revoked API token');
-  const member = await firestore().collection('workspaces').doc(workspaceId).collection('members').doc(userId).get();
+  const wsRef = firestore().collection('workspaces').doc(workspaceId);
+  const [member, ws] = await firestore().getAll(wsRef.collection('members').doc(userId), wsRef);
   if (!member.exists) throw unauthorized("The token's creator is no longer a member of its workspace");
+  // A token from an earlier membership (created while its creator was being removed, so the
+  // revoke missed it) stays dead after a re-invite. Tokens older than the workspace itself are
+  // exempt: only scripts/migrate-workspaces.ts makes those, for members it dates to the migration.
+  const createdMs = (doc.get('createdAt') as Timestamp | undefined)?.toMillis() ?? 0;
+  const joinedMs = (member.get('joinedAt') as Timestamp | undefined)?.toMillis() ?? 0;
+  const wsCreatedMs = (ws.get('createdAt') as Timestamp | undefined)?.toMillis() ?? 0;
+  if (createdMs < joinedMs && createdMs >= wsCreatedMs) {
+    throw unauthorized('This token was created before its creator (re)joined the workspace');
+  }
+  if (ws.get('deleting') === true) throw new HttpError(409, 'workspace_deleting', 'This workspace is being deleted');
 
   const lastUsedAt = doc.get('lastUsedAt') as Timestamp | undefined;
   if (!lastUsedAt || Date.now() - lastUsedAt.toMillis() > LAST_USED_THROTTLE_MS) {

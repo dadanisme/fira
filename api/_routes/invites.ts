@@ -5,11 +5,11 @@ import { LIMITS } from '../../shared/workspaces.js';
 import { firestore } from '../_lib/admin.js';
 import { memberOf, requireRole } from '../_lib/auth.js';
 import { sendInviteEmail } from '../_lib/email.js';
-import { badRequest, coded, created, jsonBody, noContent, notFound, tooManyRequests, unprocessable } from '../_lib/http.js';
+import { badRequest, coded, created, jsonBody, noContent, notFound, unprocessable } from '../_lib/http.js';
 import { route } from '../_lib/router.js';
 import { col } from '../_lib/store.js';
 import { onlyKeys, optEnum, optString } from '../_lib/validate.js';
-import { countSeats, inviteJson, memberJson, normalizeEmail, workspaceJson } from '../_lib/workspaces.js';
+import { assertLiveWorkspace, countSeats, inviteJson, memberJson, normalizeEmail, reserveInviteSend, workspaceJson } from '../_lib/workspaces.js';
 
 /** The `:email` path segment, lowercased (invites are keyed by the exact lowercased email). */
 const pathEmail = (raw: string) => raw.trim().toLowerCase();
@@ -54,12 +54,13 @@ export const inviteRoutes = [
         tx.get(ref),
         tx.get(col.members(wid).where('email', '==', email).limit(1)),
       ]);
-      if (!ws.exists) throw notFound('Workspace not found');
+      assertLiveWorkspace(ws);
       if (!members.empty) throw coded(409, 'already_member', `${email} is already a member`);
       if (existing.exists) throw coded(409, 'already_invited', `${email} is already invited`);
       if ((await countSeats(tx, wid)) >= LIMITS.seats) {
         throw coded(422, 'seat_limit', `A workspace has at most ${LIMITS.seats} seats (members + pending invites)`);
       }
+      await reserveInviteSend(tx, wid, email, member.uid);
       tx.create(ref, {
         email,
         role,
@@ -76,14 +77,13 @@ export const inviteRoutes = [
 
   route('POST', '/workspaces/:wid/invites/:email/resend', 'member', async ({ params, member, workspaceId: wid }) => {
     requireRole(member, 'admin');
-    const ref = col.invites(wid).doc(pathEmail(params.email));
+    const email = pathEmail(params.email);
+    const ref = col.invites(wid).doc(email);
     await firestore().runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
+      const [ws, snap] = await tx.getAll(col.workspaces().doc(wid), ref);
+      assertLiveWorkspace(ws);
       if (!snap.exists) throw notFound('Invite not found');
-      const last = snap.get('lastSentAt') as Timestamp | undefined;
-      if (last && Date.now() - last.toMillis() < LIMITS.resendCooldownMs) {
-        throw tooManyRequests('This invite was just sent; try again in a minute');
-      }
+      await reserveInviteSend(tx, wid, email, member.uid);
       tx.update(ref, { lastSentAt: Timestamp.now(), emailStatus: 'pending', emailError: Fv.delete() });
     });
     return deliver(ref);
@@ -111,6 +111,7 @@ export const inviteRoutes = [
     await firestore().runTransaction(async (tx) => {
       const [invite, ws, existing] = await Promise.all([tx.get(inviteRef), tx.get(wsRef), tx.get(memberRef)]);
       if (!invite.exists || !ws.exists) throw notFound('Invite not found');
+      assertLiveWorkspace(ws);
       if (!existing.exists) {
         tx.create(memberRef, {
           uid: user.uid,

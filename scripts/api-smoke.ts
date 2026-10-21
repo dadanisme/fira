@@ -9,7 +9,7 @@
  * local Resend stub (RESEND_API_URL) that records them and can be told to fail.
  */
 import assert from 'node:assert/strict';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Timestamp } from 'firebase-admin/firestore';
 
@@ -103,6 +103,8 @@ function expectStatus(res: Res, status: number, code?: string) {
 const results: { name: string; ok: boolean; error?: unknown }[] = [];
 async function test(name: string, fn: () => Promise<void>) {
   try {
+    // Each test starts with fresh invite email limits; the limits test sets them up itself.
+    await resetInviteLimits();
     await fn();
     results.push({ name, ok: true });
     console.log(`  ok    ${name}`);
@@ -114,6 +116,9 @@ async function test(name: string, fn: () => Promise<void>) {
 
 const db = firestore();
 const wsDoc = (wid: string) => db.collection('workspaces').doc(wid);
+async function resetInviteLimits() {
+  for (const name of ['inviteSends', 'inviteQuotas']) await db.recursiveDelete(db.collection(name));
+}
 /** `/workspaces/{wid}` + rest. */
 const W = (wid: string, rest = '') => `/workspaces/${wid}${rest}`;
 const enc = encodeURIComponent;
@@ -946,6 +951,47 @@ await test('page attachments: upload → permanent token URL, embed in content, 
   assert.equal((await fetch(again.body.url)).status, 200, 'other attachments unaffected');
 });
 
+await test('attachment records with a forged storagePath are never signed, and their path is never deleted', async () => {
+  const card = (await call('GET', `/cards/${keys.card}`)).body;
+  const cardAtts = wsA.collection('cards').doc(card.id).collection('attachments');
+  const pageAtts = wsA.collection('pages').doc(pages.root.id).collection('attachments');
+  // Someone else's files: another workspace, and another card of this workspace.
+  const victims = ['workspaces/victim-ws/cards/vc/va/secret.pdf', `workspaces/${widA}/cards/other-card/oa/x.txt`];
+  for (const path of victims) await bucket().file(path).save(Buffer.from('secret'));
+  const record = (storagePath: string) => ({
+    name: 'x',
+    size: 6,
+    contentType: 'application/pdf',
+    storagePath,
+    uploadedBy: { type: 'user', id: 'evil', name: 'Evil' },
+    createdAt: Timestamp.now(),
+  });
+  await cardAtts.doc('forged1').set(record(victims[0]));
+  await cardAtts.doc('forged2').set(record(victims[1]));
+  // Right card, wrong attachment id: still not its own object.
+  await cardAtts.doc('forged3').set(record(`workspaces/${widA}/cards/${card.id}/someone-else/x.txt`));
+  await pageAtts.doc('forged4').set(record(victims[0]));
+
+  const list = await call('GET', `/cards/${keys.card}/attachments`);
+  expectStatus(list, 200);
+  assert.deepEqual(
+    list.body.items.filter((a: any) => a.id.startsWith('forged')),
+    [],
+    'forged records are not listed (no signed URL)',
+  );
+  for (const id of ['forged1', 'forged2', 'forged3']) {
+    expectStatus(await call('DELETE', `/cards/${keys.card}/attachments/${id}`), 204);
+    assert.equal((await cardAtts.doc(id).get()).exists, false, 'the forged record is removed');
+  }
+  expectStatus(await call('DELETE', `/pages/${pages.root.id}/attachments/forged4`), 204);
+  assert.equal((await pageAtts.doc('forged4').get()).exists, false);
+  for (const path of victims) {
+    const [exists] = await bucket().file(path).exists();
+    assert.ok(exists, `${path} must survive`);
+    await bucket().file(path).delete();
+  }
+});
+
 // ---------------------------------------------------------------- work page
 
 await test('POST /cards/{key}/page creates the page from the project template, links both ways, 409 when linked', async () => {
@@ -1070,7 +1116,9 @@ await test('POST invites stores the invite and emails it through Resend', async 
   assert.equal(email.auth, `Bearer ${RESEND_KEY}`);
   assert.equal(email.body.from, 'Fira <invites@mail.example.com>');
   assert.deepEqual(email.body.to, ['ada@example.com']);
-  assert.equal(email.body.subject, 'Owner invited you to Acme on fira');
+  assert.equal(email.body.subject, "You've been invited to a workspace on Fira", 'no user-controlled text in the subject');
+  assert.ok(email.body.text.includes('Owner invited you to join Acme on fira as an admin.'), email.body.text);
+  assert.ok(email.body.html.includes('<strong>Owner</strong> invited you to join <strong>Acme</strong>'), email.body.html);
   assert.ok(email.body.html.includes('href="https://fira.test/workspaces"'), email.body.html);
   assert.ok(email.body.text.includes('https://fira.test/workspaces'));
   assert.ok(email.body.text.includes('Sign in with Google as ada@example.com'));
@@ -1115,10 +1163,15 @@ await test('invite conflicts and validation', async () => {
   expectStatus(await call('POST', W('nope', '/invites'), { auth: idToken, body: { email: 'z@example.com' } }), 404, 'not_found');
 });
 
+const inviteSendRef = (wid: string, email: string) => db.collection('inviteSends').doc(createHash('sha256').update(`${wid}\n${email}`).digest('hex'));
+const today = () => new Date().toISOString().slice(0, 10);
+
 await test('resend: 429 within a minute; after the cooldown it sends again', async () => {
   const R = W(widA, `/invites/${enc(mia.email)}/resend`);
+  // The limits were reset before this test, as if Mia's invite went out over a minute ago.
+  expectStatus(await call('POST', R, { auth: idToken }), 200);
   expectStatus(await call('POST', R, { auth: idToken }), 429, 'too_many_requests');
-  await wsDoc(widA).collection('invites').doc(mia.email).update({ lastSentAt: Timestamp.fromMillis(Date.now() - 61_000) });
+  await inviteSendRef(widA, mia.email).update({ lastSentAt: Timestamp.fromMillis(Date.now() - 61_000) });
   const before = sentEmails.length;
   const res = await call('POST', R, { auth: idToken });
   expectStatus(res, 200);
@@ -1129,6 +1182,60 @@ await test('resend: 429 within a minute; after the cooldown it sends again', asy
   assert.deepEqual(sentEmails.at(-1)!.body.to, [mia.email]);
   expectStatus(await call('POST', R, { auth: idToken }), 429, 'too_many_requests');
   expectStatus(await call('POST', W(widA, '/invites/nobody%40example.com/resend'), { auth: idToken }), 404, 'not_found');
+});
+
+await test('invite email limits: the per-address cooldown survives revoke + re-invite; 20 sends a day per inviter', async () => {
+  const I = W(widA, '/invites');
+  const C = 'cool@example.com';
+  const before = sentEmails.length;
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: C } }), 201);
+  assert.ok((await inviteSendRef(widA, C).get()).exists, 'send recorded apart from the invite');
+  expectStatus(await call('DELETE', W(widA, `/invites/${enc(C)}`), { auth: idToken }), 204);
+  const again = await call('POST', I, { auth: idToken, body: { email: C } });
+  expectStatus(again, 429, 'too_many_requests');
+  assert.equal((await inviteDoc(widA, C)).exists, false, 'a refused invite is not created');
+  assert.equal(sentEmails.length, before + 1, 'revoke + re-invite sent nothing');
+  // Another workspace may email the same address.
+  expectStatus(await call('POST', W(ids.two, '/invites'), { auth: idToken, body: { email: C } }), 201);
+  await inviteSendRef(widA, C).update({ lastSentAt: Timestamp.fromMillis(Date.now() - 61_000) });
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: C } }), 201);
+  assert.equal((await db.collection('inviteQuotas').doc(ownerUid).get()).get('count'), 3);
+
+  // Daily cap per inviter (creates and resends, every workspace).
+  await db.collection('inviteQuotas').doc(ownerUid).set({ day: today(), count: 20 });
+  const sent = sentEmails.length;
+  const capped = await call('POST', I, { auth: idToken, body: { email: 'capped@example.com' } });
+  expectStatus(capped, 429, 'invite_limit');
+  assert.match(capped.body.error.message, /20 invite emails a day/);
+  expectStatus(await call('POST', W(ids.two, '/invites'), { auth: idToken, body: { email: 'capped@example.com' } }), 429, 'invite_limit');
+  expectStatus(await call('POST', W(widA, `/invites/${enc(mia.email)}/resend`), { auth: idToken }), 429, 'invite_limit');
+  assert.equal((await inviteDoc(widA, 'capped@example.com')).exists, false);
+  assert.equal(sentEmails.length, sent, 'nothing sent over the cap');
+  // A new UTC day starts a new count.
+  await db.collection('inviteQuotas').doc(ownerUid).set({ day: '2000-01-01', count: 20 });
+  expectStatus(await call('POST', I, { auth: idToken, body: { email: 'capped@example.com' } }), 201);
+  assert.deepEqual((await db.collection('inviteQuotas').doc(ownerUid).get()).data()?.count, 1);
+
+  for (const [wid, email] of [[widA, C], [ids.two, C], [widA, 'capped@example.com']]) {
+    expectStatus(await call('DELETE', W(wid, `/invites/${enc(email)}`), { auth: idToken }), 204);
+  }
+});
+
+await test('invite email: user-controlled names only in the body, escaped', async () => {
+  await adminAuth().updateUser(xan.uid, { displayName: 'Bank <Security> https://evil.test' });
+  const xanToken = await signIn(xan.email);
+  const ws = await call('POST', '/workspaces', { auth: xanToken, body: { name: '<b>Evil</b> & co', slug: 'xan-space' } });
+  expectStatus(ws, 201);
+  ids.xan = ws.body.id;
+  expectStatus(await call('POST', W(ids.xan, '/invites'), { auth: xanToken, body: { email: 'victim@example.com' } }), 201);
+  const email = sentEmails.at(-1)!.body;
+  assert.equal(email.subject, "You've been invited to a workspace on Fira");
+  assert.ok(email.html.includes('<strong>Bank &lt;Security&gt; https://evil.test</strong>'), email.html);
+  assert.ok(email.html.includes('<strong>&lt;b&gt;Evil&lt;/b&gt; &amp; co</strong>'), email.html);
+  assert.ok(!email.html.includes('<b>Evil'), 'no raw HTML from the name');
+  expectStatus(await call('DELETE', W(ids.xan, `/invites/${enc('victim@example.com')}`), { auth: xanToken }), 204);
+  await adminAuth().updateUser(xan.uid, { displayName: 'Xan' });
+  xan.idToken = await signIn(xan.email);
 });
 
 await test('accept: only the invitee; joins with the invite role; the invite is deleted', async () => {
@@ -1326,6 +1433,80 @@ await test('leave: members and admins can leave; the owner must transfer first',
   expectStatus(await call('DELETE', W(widA, `/members/${mia.uid}`), { auth: mia.idToken }), 404, 'not_found');
   expectStatus(await call('DELETE', W(widA, `/members/${ownerUid}`), { auth: idToken }), 403, 'forbidden');
   assert.equal((await memberDoc(widA, ownerUid))?.role, 'owner');
+});
+
+// ---------------------------------------------------------------- hardening (xan's workspace)
+
+await test('removal re-checks the owner inside its transaction (a racing transfer never leaves a workspace ownerless)', async () => {
+  const wid = ids.xan;
+  await join(wid, xan.idToken, ada, 'admin');
+  await join(wid, xan.idToken, sam);
+  // As if a transfer to Sam committed while Ada's removal was in flight (Sam's doc still says member).
+  await wsDoc(wid).update({ ownerUid: sam.uid });
+  expectStatus(await call('DELETE', W(wid, `/members/${sam.uid}`), { auth: ada.idToken }), 403, 'forbidden');
+  assert.ok(await memberDoc(wid, sam.uid), 'the owner-to-be is still a member');
+  expectStatus(await call('DELETE', W(wid, `/members/${sam.uid}`), { auth: sam.idToken }), 403, 'forbidden');
+  await wsDoc(wid).update({ ownerUid: xan.uid });
+});
+
+await test("a token older than its creator's current membership is rejected (a re-join never revives it)", async () => {
+  const wid = ids.xan;
+  const made = await call('POST', W(wid, '/tokens'), { auth: sam.idToken, body: { name: 'sam bot' } });
+  expectStatus(made, 201);
+  expectStatus(await call('GET', '/me', { auth: made.body.secret }), 200);
+  // Removed without the revoke reaching this token (it was created during the removal), then re-invited.
+  await wsDoc(wid).collection('members').doc(sam.uid).delete();
+  expectStatus(await call('GET', '/me', { auth: made.body.secret }), 401, 'unauthorized');
+  await delay(5);
+  await join(wid, xan.idToken, sam);
+  assert.equal((await db.collection('tokens').doc(made.body.token.id).get()).get('revoked'), false, 'never marked revoked');
+  const stale = await call('GET', '/me', { auth: made.body.secret });
+  expectStatus(stale, 401, 'unauthorized');
+  assert.match(stale.body.error.message, /before its creator/);
+  const fresh = await call('POST', W(wid, '/tokens'), { auth: sam.idToken, body: { name: 'sam bot 2' } });
+  expectStatus(await call('GET', '/me', { auth: fresh.body.secret }), 200);
+
+  // Migrated tokens predate the workspace (and the member's migrated joinedAt): they keep working.
+  const old = `fira_${'M'.repeat(32)}`;
+  const wsCreated = (await wsDoc(wid).get()).get('createdAt') as Timestamp;
+  await db.collection('tokens').doc('migrated').set({
+    workspaceId: wid,
+    userId: sam.uid,
+    name: 'migrated',
+    color: 'gray',
+    hash: hashSecret(old),
+    prefix: old.slice(0, 8),
+    createdAt: Timestamp.fromMillis(wsCreated.toMillis() - 86_400_000),
+    revoked: false,
+  });
+  expectStatus(await call('GET', '/me', { auth: old }), 200);
+});
+
+await test('a workspace being deleted refuses invites, accepts, tokens, API calls, rename and transfer; the delete can be retried', async () => {
+  const wid = ids.xan;
+  const ws = wsDoc(wid);
+  const token = (await call('POST', W(wid, '/tokens'), { auth: xan.idToken, body: { name: 'xan bot' } })).body.secret;
+  await ws.collection('projects').doc('px').set({ key: 'XAN', name: 'X', columns: [{ id: 'x1', name: 'Todo' }], fields: [], nextNumber: 1, rank: 'a0', createdAt: new Date() });
+  expectStatus(await call('POST', '/cards', { auth: token, body: { project: 'XAN', title: 'before' } }), 201);
+  expectStatus(await call('POST', W(wid, '/invites'), { auth: xan.idToken, body: { email: bea.email } }), 201);
+  // As if a DELETE had set the flag and then timed out.
+  await ws.update({ deleting: true });
+
+  const deleting = (res: Res) => expectStatus(res, 409, 'workspace_deleting');
+  deleting(await call('POST', W(wid, '/invites'), { auth: xan.idToken, body: { email: 'late@example.com' } }));
+  deleting(await call('POST', W(wid, `/invites/${enc(bea.email)}/resend`), { auth: xan.idToken }));
+  deleting(await call('POST', W(wid, `/invites/${enc(bea.email)}/accept`), { auth: bea.idToken }));
+  deleting(await call('POST', W(wid, '/tokens'), { auth: xan.idToken, body: { name: 'late' } }));
+  deleting(await call('GET', '/me', { auth: token }));
+  deleting(await call('POST', '/cards', { auth: token, body: { project: 'XAN', title: 'late' } }));
+  deleting(await call('PATCH', W(wid), { auth: xan.idToken, body: { name: 'Renamed' } }));
+  deleting(await call('POST', W(wid, '/transfer'), { auth: xan.idToken, body: { uid: ada.uid } }));
+  assert.equal(await memberDoc(wid, bea.uid), undefined, 'not joined');
+
+  expectStatus(await call('DELETE', W(wid), { auth: xan.idToken, body: { confirm: 'xan-space' } }), 204);
+  assert.equal((await ws.get()).exists, false);
+  assert.deepEqual(await ws.listCollections(), []);
+  assert.equal((await db.collection('slugs').doc('xan-space').get()).exists, false);
 });
 
 // ---------------------------------------------------------------- transfer

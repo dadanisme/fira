@@ -31,7 +31,9 @@ const escapeHtml = (text: string) =>
 /** Subject, HTML and text of an invite email. */
 export function inviteMessage({ to, workspaceName, inviterName, role }: InviteEmail) {
   const link = `${appUrl()}/workspaces`;
-  const subject = `${inviterName} invited you to ${workspaceName} on fira`;
+  // Fixed: the names are user-controlled (a Google display name, a workspace name), so they stay
+  // out of the subject, the line most clients show and auto-link. The body has them, escaped.
+  const subject = "You've been invited to a workspace on Fira";
   const as = role === 'admin' ? 'an admin' : 'a member';
   const text = [
     `${inviterName} invited you to join ${workspaceName} on fira as ${as}.`,

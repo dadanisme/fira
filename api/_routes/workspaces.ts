@@ -6,7 +6,7 @@ import { badRequest, coded, created, jsonBody, noContent, notFound, unprocessabl
 import { route } from '../_lib/router.js';
 import { col } from '../_lib/store.js';
 import { onlyKeys, optString } from '../_lib/validate.js';
-import { countOwned, deleteWorkspaceData, workspaceJson } from '../_lib/workspaces.js';
+import { assertLiveWorkspace, countOwned, deleteWorkspaceData, workspaceJson } from '../_lib/workspaces.js';
 
 function readName(body: Record<string, unknown>): string | undefined {
   const raw = optString(body, 'name');
@@ -71,7 +71,7 @@ export const workspaceRoutes = [
 
     await firestore().runTransaction(async (tx) => {
       const ws = await tx.get(wsRef);
-      if (!ws.exists) throw notFound('Workspace not found');
+      assertLiveWorkspace(ws);
       const current = workspaceJson(ws);
       const nextName = name ?? current.name;
       const nextSlug = slug ?? current.slug;
@@ -116,7 +116,7 @@ export const workspaceRoutes = [
 
     await firestore().runTransaction(async (tx) => {
       const [ws, target] = await Promise.all([tx.get(wsRef), tx.get(targetRef)]);
-      if (!ws.exists) throw notFound('Workspace not found');
+      assertLiveWorkspace(ws);
       if (!target.exists) throw notFound('Member not found');
       if (ws.get('ownerUid') !== member.uid) throw coded(403, 'forbidden', 'Only the workspace owner can do this');
       if ((await countOwned(tx, uid)) >= LIMITS.ownedWorkspaces) throw workspaceLimit('The new owner already owns');

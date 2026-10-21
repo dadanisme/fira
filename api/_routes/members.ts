@@ -1,5 +1,5 @@
 import { INVITE_ROLES, type WorkspaceRole } from '../../shared/types.js';
-import { canManageMember } from '../../shared/workspaces.js';
+import { canManageMember, isAdminRole } from '../../shared/workspaces.js';
 import { firestore } from '../_lib/admin.js';
 import { requireRole } from '../_lib/auth.js';
 import { badRequest, forbidden, jsonBody, noContent, notFound } from '../_lib/http.js';
@@ -28,24 +28,34 @@ export const memberRoutes = [
     return memberJson(await ref.get());
   }),
 
-  /** Removes a member (admin), or leaves (own uid; anyone but the owner). Their tokens here are revoked. */
+  /**
+   * Removes a member (admin), or leaves (own uid; anyone but the owner). Their tokens here are
+   * revoked. One transaction re-reads the target, the caller and the workspace, so a concurrent
+   * transfer or role change can't leave the workspace without its owner.
+   */
   route('DELETE', '/workspaces/:wid/members/:uid', 'member', async ({ params, member, workspaceId: wid }) => {
     const self = params.uid === member.uid;
-    if (self) {
-      if (member.role === 'owner') throw forbidden('The owner cannot leave: transfer ownership first');
-    } else {
-      requireRole(member, 'admin');
-    }
+    if (!self) requireRole(member, 'admin');
     const ref = col.members(wid).doc(params.uid);
-    const target = await ref.get();
-    if (!target.exists) throw notFound('Member not found');
-    if (!self && !canManageMember(member.role, target.get('role') as WorkspaceRole)) {
-      throw forbidden('The owner cannot be removed');
-    }
-    const batch = firestore().batch();
-    batch.delete(ref);
-    await revokeMemberTokens(batch, wid, params.uid);
-    await batch.commit();
+    const actorRef = col.members(wid).doc(member.uid);
+    const wsRef = col.workspaces().doc(wid);
+
+    await firestore().runTransaction(async (tx) => {
+      const [target, actor, ws] = await tx.getAll(ref, actorRef, wsRef);
+      if (!target.exists) throw notFound('Member not found');
+      const targetRole = target.get('role') as WorkspaceRole;
+      const targetIsOwner = targetRole === 'owner' || ws.get('ownerUid') === params.uid;
+      if (self) {
+        if (targetIsOwner) throw forbidden('The owner cannot leave: transfer ownership first');
+      } else {
+        if (!actor.exists) throw notFound('Workspace not found');
+        const actorRole = actor.get('role') as WorkspaceRole;
+        if (!isAdminRole(actorRole)) throw forbidden('Only workspace admins can do this');
+        if (targetIsOwner || !canManageMember(actorRole, targetRole)) throw forbidden('The owner cannot be removed');
+      }
+      await revokeMemberTokens(tx, wid, params.uid);
+      tx.delete(ref);
+    });
     return noContent();
   }),
 ];

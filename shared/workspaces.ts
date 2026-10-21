@@ -12,8 +12,13 @@ export const LIMITS = {
   apiUploadBytes: 4 * 1024 * 1024,
   /** Max workspace name length. */
   workspaceName: 60,
-  /** Minimum time between two sends of the same invite. */
+  /**
+   * Minimum time between two invite emails to the same address from the same workspace (create
+   * or resend). Tracked server-side, so it survives revoking and re-inviting.
+   */
   resendCooldownMs: 60_000,
+  /** Invite emails one user may send per UTC day, across all workspaces (creates + resends). */
+  inviteSendsPerDay: 20,
 } as const;
 
 /** 3–32 chars: starts with a-z, ends with a-z0-9, a-z0-9 and single hyphens inside. */
@@ -93,4 +98,23 @@ export function cardAttachmentPath(wid: string, cardId: string, attachmentId: st
 /** `workspaces/{wid}/pages/{pageId}/{attachmentId}/{name}`. */
 export function pageAttachmentPath(wid: string, pageId: string, attachmentId: string, name: string): string {
   return `${workspaceStoragePrefix(wid)}pages/${pageId}/${attachmentId}/${name}`;
+}
+
+/** Storage prefix of one card attachment's object: `workspaces/{wid}/cards/{cardId}/{attachmentId}/`. */
+export function cardAttachmentPrefix(wid: string, cardId: string, attachmentId: string): string {
+  return `${workspaceStoragePrefix(wid)}cards/${cardId}/${attachmentId}/`;
+}
+
+/** Storage prefix of one page attachment's object: `workspaces/{wid}/pages/{pageId}/{attachmentId}/`. */
+export function pageAttachmentPrefix(wid: string, pageId: string, attachmentId: string): string {
+  return `${workspaceStoragePrefix(wid)}pages/${pageId}/${attachmentId}/`;
+}
+
+/**
+ * Whether an attachment record's `storagePath` is an object under its own `prefix` (one of the two
+ * above) with a non-empty name. Anything else is a forged record: never sign, read or delete it,
+ * since that would act on another card's, page's or workspace's file.
+ */
+export function isOwnAttachmentPath(storagePath: unknown, prefix: string): storagePath is string {
+  return typeof storagePath === 'string' && storagePath.startsWith(prefix) && storagePath.length > prefix.length;
 }

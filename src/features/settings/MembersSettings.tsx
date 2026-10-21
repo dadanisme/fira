@@ -216,6 +216,8 @@ function inviteErrorMessage(err: unknown, email: string): string {
     if (err.code === 'seat_limit') return `All ${LIMITS.seats} seats are taken (members plus pending invites).`;
     if (err.code === 'already_member') return `${email} is already a member`;
     if (err.code === 'already_invited') return `${email} is already invited`;
+    if (err.code === 'too_many_requests') return `An invite was just emailed to ${email}. Try again in a minute.`;
+    if (err.code === 'invite_limit') return `You've sent ${LIMITS.inviteSendsPerDay} invite emails today, the daily limit. Try again tomorrow.`;
   }
   return errorMessage(err);
 }

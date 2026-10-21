@@ -77,4 +77,6 @@ export type ApiErrorCode =
   | 'already_invited'
   | 'workspace_limit'
   | 'seat_limit'
-  | 'too_many_requests';
+  | 'too_many_requests'
+  | 'invite_limit'
+  | 'workspace_deleting';

@@ -7,7 +7,7 @@ import { route } from '../_lib/router.js';
 import { fromDoc } from '../_lib/serialize.js';
 import { col, pageById } from '../_lib/store.js';
 import { storeUpload } from '../_lib/uploads.js';
-import { pageAttachmentPath } from '../../shared/workspaces.js';
+import { isOwnAttachmentPath, pageAttachmentPath, pageAttachmentPrefix } from '../../shared/workspaces.js';
 
 /**
  * Files stored with a page (`workspaces/{wid}/pages/{pageId}/{attachmentId}/{name}` in Storage, metadata in
@@ -39,7 +39,11 @@ export const pageAttachmentRoutes = [
     const snap = await ref.get();
     if (!snap.exists) throw notFound(`Attachment ${params.aid} not found on page ${params.id}`);
     const attachment = fromDoc<PageAttachment>(snap);
-    await bucket().file(attachment.storagePath).delete({ ignoreNotFound: true });
+    // Only the record's own object (`workspaces/{wid}/pages/{id}/{aid}/...`): the Admin SDK would
+    // delete any path, in any workspace, so a forged record loses just the record.
+    if (isOwnAttachmentPath(attachment.storagePath, pageAttachmentPrefix(wid, params.id, attachment.id))) {
+      await bucket().file(attachment.storagePath).delete({ ignoreNotFound: true });
+    }
     await ref.delete();
     return noContent();
   }),

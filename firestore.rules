@@ -39,6 +39,29 @@ service cloud.firestore {
       return sub in ['comments', 'activity', 'attachments', 'versions', 'presence', 'threads'];
     }
 
+    // Content writes stop once the API has flagged the workspace for deletion (and when the
+    // workspace doc is gone: get() of a missing doc is null, so this errors, which denies).
+    // One get() per request, deduplicated across a batch like isMember().
+    function notDeleting(wid) {
+      return get(/databases/$(database)/documents/workspaces/$(wid)).data.get('deleting', false) != true;
+    }
+
+    // An attachment record must point at its own object:
+    // workspaces/{wid}/{cards|pages}/{id}/{attachmentId}/{name}. Otherwise a member could plant a
+    // record naming another workspace's file, which the API (Admin SDK) would sign or delete.
+    // Compared segment by segment (no regex, so ids need no escaping).
+    function ownAttachmentPath(wid, coll, id, aid, data) {
+      return (coll == 'cards' || coll == 'pages')
+        && data.storagePath is string
+        && pathSegmentsOk(data.storagePath.split('/'), wid, coll, id, aid);
+    }
+
+    function pathSegmentsOk(p, wid, coll, id, aid) {
+      return p.size() >= 6
+        && p[0] == 'workspaces' && p[1] == wid && p[2] == coll && p[3] == id && p[4] == aid
+        && p[5].size() > 0;
+    }
+
     match /workspaces/{wid} {
       // Server-only writes (Admin SDK) for the workspace, its members and invites.
       allow read: if isMember(wid);
@@ -52,11 +75,15 @@ service cloud.firestore {
       }
 
       match /{coll}/{id} {
-        allow read, write: if isContent(coll) && isMember(wid);
+        allow read: if isContent(coll) && isMember(wid);
+        allow write: if isContent(coll) && isMember(wid) && notDeleting(wid);
       }
 
       match /{coll}/{id}/{sub}/{subId} {
-        allow read, write: if isContent(coll) && isContentSub(sub) && isMember(wid);
+        allow read: if isContent(coll) && isContentSub(sub) && isMember(wid);
+        allow delete: if isContent(coll) && isContentSub(sub) && isMember(wid) && notDeleting(wid);
+        allow create, update: if isContent(coll) && isContentSub(sub) && isMember(wid) && notDeleting(wid)
+          && (sub != 'attachments' || ownAttachmentPath(wid, coll, id, subId, request.resource.data));
       }
     }
 
@@ -70,7 +97,7 @@ service cloud.firestore {
       allow read: if verified() && resource.data.email == myEmail();
     }
 
-    // slugs/*, tokens/*: no rules, so no client access. No client writes to workspaces,
+    // slugs/*, tokens/*, inviteSends/*, inviteQuotas/*: no rules, so no client access. No client writes to workspaces,
     // members or invites anywhere.
   }
 }

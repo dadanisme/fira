@@ -13,10 +13,10 @@ import { confirmAction } from '../../../components/ConfirmDialog';
 
 /** Download URLs, cached per storage path for the session. */
 const urlCache = new Map<string, Promise<string>>();
-function cachedUrl(a: Attachment): Promise<string> {
+function cachedUrl(cardId: string, a: Attachment): Promise<string> {
   let p = urlCache.get(a.storagePath);
   if (!p) {
-    p = attachmentUrl(a);
+    p = attachmentUrl(cardId, a);
     p.catch(() => urlCache.delete(a.storagePath));
     urlCache.set(a.storagePath, p);
   }
@@ -110,14 +110,14 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
 
   useEffect(() => {
     let live = true;
-    cachedUrl(a).then(
+    cachedUrl(cardId, a).then(
       (u) => live && setUrl(u),
       () => {},
     );
     return () => {
       live = false;
     };
-  }, [a]);
+  }, [cardId, a]);
 
   const remove = () => {
     void confirmAction({ title: `Delete “${a.name}”?`, confirmLabel: 'Delete', danger: true }).then(
