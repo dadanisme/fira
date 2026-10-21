@@ -169,6 +169,21 @@ export function savePageVersioned(
 }
 
 /**
+ * `savePageVersioned` in a given workspace rather than the active one, for saves that can
+ * outlive a workspace switch (autosave flushes on unmount, after the next workspace is
+ * already active).
+ */
+export function savePageVersionedIn(
+  workspaceId: string,
+  pageId: string,
+  baseVersion: number,
+  next: { title: string; content: string },
+  opts?: PageSaveOptions,
+): Promise<PageSaveResult> {
+  return savePageIfCurrent(db, workspaceId, pageId, baseVersion, next, currentActor(), opts);
+}
+
+/**
  * Restoring a version saves its title and content as a new version on top of whatever
  * is current (snapshotting the replaced state first if it has no snapshot).
  */

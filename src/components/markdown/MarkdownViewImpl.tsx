@@ -5,6 +5,7 @@ import { getSchema } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
 import { cx } from '../../lib/cx';
 import type { MarkdownViewProps } from '../MarkdownEditor';
+import { inAppPath } from './appLinks';
 import { cardHref, cardKeyMatches } from './cardLinks';
 import { schemaExtensions } from './schema';
 import './markdown.css';
@@ -80,9 +81,12 @@ function renderInline(node: JSONContent, key: number, inCode = false): ReactNode
         el = <code>{el}</code>;
         break;
       case 'link': {
-        const href = safeUrl(mark.attrs?.href);
-        el = (
-          <a href={href} target="_blank" rel="noopener noreferrer nofollow">
+        // In-app links (pages, cards; workspace-relative ones resolved in this workspace) navigate in place.
+        const path = inAppPath(mark.attrs?.href);
+        el = path ? (
+          <Link to={path}>{el}</Link>
+        ) : (
+          <a href={safeUrl(mark.attrs?.href)} target="_blank" rel="noopener noreferrer nofollow">
             {el}
           </a>
         );

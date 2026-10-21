@@ -26,8 +26,8 @@ import {
 } from 'lucide-react';
 import type { Page } from '@shared/types';
 import { byRank } from '@shared/rank';
-import { savePage, trashPage, updatePageMeta, usePages } from '../../data/pages';
-import { useWsPath } from '../../data/workspace';
+import { trashPage, updatePageMeta, usePages } from '../../data/pages';
+import { currentWorkspaceId, useWorkspaceId, useWsPath } from '../../data/workspace';
 import { SidebarLink, SidebarSection } from '../../app/SidebarSection';
 import { IconButton } from '../../components/IconButton';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../../components/Menu';
@@ -35,48 +35,58 @@ import { Popover } from '../../components/Popover';
 import { preloadMarkdownEditor } from '../../components/MarkdownEditor';
 import { cx } from '../../lib/cx';
 import { remPx } from '../../lib/rem';
-import { addPage, addPageFromTemplate, duplicate, pageTitle } from './actions';
+import { addPage, addPageFromTemplate, duplicate, pageTitle, renamePage } from './actions';
 import { ancestors, childrenMap, dropRank, flatten, project, type FlatItem, type Projection } from './tree';
 
 // Rendered (lazily) in the sidebar below the projects. Keep Tiptap out of this module's imports.
 
 /** Indent per tree level, in rem (0.75rem = 12 design px). */
 const INDENT = 0.75;
-const EXPANDED_KEY = 'fira-docs-expanded';
+/** Per workspace (this device). */
+const expandedKey = (wid: string) => `fira:docs-expanded:${wid}`;
 
 // ------------------------------------------------------------ expanded state (localStorage)
 
 const expandedListeners = new Set<() => void>();
-let expandedState: ReadonlySet<string> = readExpanded();
+const expandedByWorkspace = new Map<string, ReadonlySet<string>>();
 
-function readExpanded(): ReadonlySet<string> {
+function readExpanded(wid: string): ReadonlySet<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '[]') as string[]);
+    return new Set(JSON.parse(localStorage.getItem(expandedKey(wid)) ?? '[]') as string[]);
   } catch {
     return new Set();
   }
 }
 
-function setExpanded(id: string, open: boolean) {
-  const next = new Set(expandedState);
+function expandedIn(wid: string): ReadonlySet<string> {
+  let set = expandedByWorkspace.get(wid);
+  if (!set) {
+    set = readExpanded(wid);
+    expandedByWorkspace.set(wid, set);
+  }
+  return set;
+}
+
+function setExpanded(id: string, open: boolean, wid = currentWorkspaceId()) {
+  const next = new Set(expandedIn(wid));
   if (open) next.add(id);
   else next.delete(id);
-  expandedState = next;
+  expandedByWorkspace.set(wid, next);
   try {
-    localStorage.setItem(EXPANDED_KEY, JSON.stringify([...next]));
+    localStorage.setItem(expandedKey(wid), JSON.stringify([...next]));
   } catch {
     // Storage unavailable: remembered for this session only.
   }
   expandedListeners.forEach((l) => l());
 }
 
-function useExpanded(): ReadonlySet<string> {
+function useExpanded(wid: string): ReadonlySet<string> {
   return useSyncExternalStore(
     (l) => {
       expandedListeners.add(l);
       return () => expandedListeners.delete(l);
     },
-    () => expandedState,
+    () => expandedIn(wid),
   );
 }
 
@@ -145,7 +155,8 @@ export default function DocsTree() {
 }
 
 function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boolean; empty: string }) {
-  const stored = useExpanded();
+  const wid = useWorkspaceId();
+  const stored = useExpanded(wid);
   const activeMatch = useMatch('/w/:slug/d/:pageId');
   const activePageId = activeMatch?.params.pageId;
   const [dragId, setDragId] = useState<string | null>(null);
@@ -160,8 +171,8 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
     const chain = ancestors(pages, activePageId);
     if (chain.length === 0 && !pages.some((p) => p.id === activePageId)) return; // pages not loaded yet
     revealed.current = activePageId;
-    for (const a of chain) if (!expandedState.has(a.id)) setExpanded(a.id, true);
-  }, [pages, activePageId]);
+    for (const a of chain) if (!expandedIn(wid).has(a.id)) setExpanded(a.id, true, wid);
+  }, [pages, activePageId, wid]);
   const expanded = stored;
   const items = useMemo(() => flatten(children, expanded, dragId), [children, expanded, dragId]);
   const projection: Projection | null = dragId && overId ? project(items, dragId, overId, offsetX, INDENT * remPx()) : null;
@@ -360,7 +371,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
 function RenameInput({ page, onDone }: { page: Page; onDone: () => void }) {
   const [title, setTitle] = useState(page.title);
   const commit = () => {
-    if (title.trim() !== page.title) savePage(page, { title: title.trim() }).catch(reportError);
+    if (title.trim() !== page.title) renamePage(page, title.trim()).catch(reportError);
     onDone();
   };
   return (

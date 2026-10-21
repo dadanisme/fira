@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { FirestoreError } from 'firebase/firestore';
 import type { Page } from '@shared/types';
-import { savePageVersioned, type PageState } from '../../data/pages';
+import { savePageVersionedIn, type PageState } from '../../data/pages';
+import { useWorkspaceId } from '../../data/workspace';
 
 const DEBOUNCE_MS = 700;
 /** "Editing" (for presence) lasts this long after the last keystroke, or while edits are unsaved. */
@@ -59,7 +60,10 @@ interface StoredDraft {
   tab: string;
 }
 
-const draftKey = (pageId: string) => `fira:page-draft:${pageId}`;
+/** Per workspace and page. */
+const draftKey = (wid: string, pageId: string) => `fira:page-draft:${wid}:${pageId}`;
+/** Before workspaces (page ids are unique across workspaces, so a draft there is this page's). */
+const legacyDraftKey = (pageId: string) => `fira:page-draft:${pageId}`;
 
 const TAB_ID = (() => {
   const fresh = Math.random().toString(36).slice(2);
@@ -72,27 +76,29 @@ const TAB_ID = (() => {
   }
 })();
 
-function readDraft(pageId: string): StoredDraft | null {
+function readDraft(wid: string, pageId: string): StoredDraft | null {
   try {
-    const raw = localStorage.getItem(draftKey(pageId));
+    const raw = localStorage.getItem(draftKey(wid, pageId)) ?? localStorage.getItem(legacyDraftKey(pageId));
     return raw ? (JSON.parse(raw) as StoredDraft) : null;
   } catch {
     return null;
   }
 }
 
-function writeDraft(pageId: string, base: Base, draft: { title: string; content: string }) {
+function writeDraft(wid: string, pageId: string, base: Base, draft: { title: string; content: string }) {
   try {
     const stored: StoredDraft = { base, ...draft, at: Date.now(), tab: TAB_ID };
-    localStorage.setItem(draftKey(pageId), JSON.stringify(stored));
+    localStorage.setItem(draftKey(wid, pageId), JSON.stringify(stored));
+    localStorage.removeItem(legacyDraftKey(pageId));
   } catch {
     // Storage full or blocked: the edit still lives in memory.
   }
 }
 
-function clearDraft(pageId: string) {
+function clearDraft(wid: string, pageId: string) {
   try {
-    localStorage.removeItem(draftKey(pageId));
+    localStorage.removeItem(draftKey(wid, pageId));
+    localStorage.removeItem(legacyDraftKey(pageId));
   } catch {
     // ignore
   }
@@ -102,12 +108,12 @@ const stateOf = (p: Page): PageState => ({ version: p.version, title: p.title, c
 const baseOf = (p: Base): Base => ({ version: p.version, title: p.title, content: p.content });
 const newest = (a: PageState | null, b: PageState): PageState => (a && a.version >= b.version ? a : b);
 
-function initialState(live: Page): { base: Base; title: string; content: string; restored: boolean } {
+function initialState(wid: string, live: Page): { base: Base; title: string; content: string; restored: boolean } {
   const fresh = { base: baseOf(live), title: live.title, content: live.content, restored: false };
-  const stored = readDraft(live.id);
+  const stored = readDraft(wid, live.id);
   if (!stored) return fresh;
   if (stored.title === live.title && stored.content === live.content) {
-    clearDraft(live.id);
+    clearDraft(wid, live.id);
     return fresh;
   }
   if (stored.tab !== TAB_ID && Date.now() - stored.at < FOREIGN_DRAFT_MS) return fresh;
@@ -128,7 +134,10 @@ function initialState(live: Page): { base: Base; title: string; content: string;
  * editor and in localStorage and are saved, still conditionally, once back online.
  */
 export function useAutosave(live: Page): Autosave {
-  const [init] = useState(() => initialState(live));
+  // Pinned for the hook's lifetime: the flush on unmount runs after a workspace switch has
+  // already made the next workspace active.
+  const wid = useWorkspaceId();
+  const [init] = useState(() => initialState(wid, live));
   const [title, setTitleState] = useState(init.title);
   const [content, setContentState] = useState(init.content);
   const [status, setStatus] = useState<SaveStatus>('idle');
@@ -184,7 +193,7 @@ export function useAutosave(live: Page): Autosave {
       base = baseOf(remote);
       for (const f of FIELDS) if (draft[f] === old[f]) setDraft(f, remote[f]);
       if (unsaved().length > 0) schedule();
-      else clearDraft(pageId);
+      else clearDraft(wid, pageId);
       return true;
     };
 
@@ -205,10 +214,10 @@ export function useAutosave(live: Page): Autosave {
       clearTimeout(saveTimer);
       saveTimer = undefined;
       if (unsaved().length === 0) {
-        clearDraft(pageId);
+        clearDraft(wid, pageId);
         return;
       }
-      writeDraft(pageId, base, draft);
+      writeDraft(wid, pageId, base, draft);
       if (conflictState || inflight) return;
       if (!navigator.onLine) {
         setStatus('offline');
@@ -221,7 +230,7 @@ export function useAutosave(live: Page): Autosave {
       const baseVersion = base.version;
       // Through a promise, so a synchronous throw (e.g. signed out) lands in the error path.
       Promise.resolve()
-        .then(() => savePageVersioned(pageId, baseVersion, sent, opts))
+        .then(() => savePageVersionedIn(wid, pageId, baseVersion, sent, opts))
         .then(
         (res) => {
           inflight = false;
@@ -235,7 +244,7 @@ export function useAutosave(live: Page): Autosave {
             base = { version: res.version, ...sent };
             setStatus((s) => (s === 'saving' ? 'saved' : s));
             if (unsaved().length > 0) schedule();
-            else clearDraft(pageId);
+            else clearDraft(wid, pageId);
           } else {
             setStatus('idle');
             rebaseOnto(res.current);
@@ -266,7 +275,7 @@ export function useAutosave(live: Page): Autosave {
       base = baseOf(state);
       for (const f of FIELDS) setDraft(f, state[f]);
       setConflict(null);
-      clearDraft(pageId);
+      clearDraft(wid, pageId);
       setStatus('idle');
     };
 

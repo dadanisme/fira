@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { X } from 'lucide-react';
 import { Extension, type Editor } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
@@ -7,6 +8,8 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { Dropcursor, Gapcursor, Placeholder, UndoRedo } from '@tiptap/extensions';
 import { cx } from '../../lib/cx';
 import type { MarkdownEditorProps, OutlineHeading } from '../MarkdownEditor';
+import { uploadErrorMessage } from '../../data/uploads';
+import { inAppPath } from './appLinks';
 import { CardMentions } from './cardMentions';
 import { CommentHighlights, commentHighlightsKey, setCommentHighlights } from './commentHighlights';
 import { HeadingFolds, revealHeading, revealPos } from './headingFolds';
@@ -32,6 +35,8 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const [uploading, setUploading] = useState(0);
+  const [uploadErrors, setUploadErrors] = useState<{ id: number; message: string }[]>([]);
+  const nextErrorId = useRef(1);
   const editorRef = useRef<Editor | null>(null);
   const isPage = variant === 'page';
   // The editor (and its plugin views) is created during render, before this component
@@ -51,7 +56,12 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
           const at = Math.min(pos ?? editor.state.selection.to, editor.state.doc.content.size);
           editor.chain().focus().insertContentAt(at, { type: 'image', attrs: { src, alt: file.name.replace(/\.[^.]+$/, '') } }).run();
         })
-        .catch(reportError)
+        .catch((err: unknown) => {
+          console.error(err);
+          const id = nextErrorId.current++;
+          setUploadErrors((list) => [...list.slice(-2), { id, message: uploadErrorMessage(err, file) }]);
+          setTimeout(() => setUploadErrors((list) => list.filter((e) => e.id !== id)), 8000);
+        })
         .finally(() => setUploading((n) => n - 1));
     }
   }, []);
@@ -104,12 +114,27 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
         addProseMirrorPlugins: () => [
           new Plugin({
             props: {
+              // In-app links (pages, cards, workspace-relative ones resolved in this workspace):
+              // a click navigates in place, Mod-click opens a new tab, Alt-click edits.
+              // External links are opened by LinkClicks (schema).
+              handleClick: (view, _pos, event) => {
+                if (event.button !== 0 || event.altKey) return false;
+                const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
+                if (!(a instanceof HTMLAnchorElement) || a.dataset.cardKey || !view.dom.contains(a)) return false;
+                const path = inAppPath(a.getAttribute('href'));
+                if (path === null) return false;
+                if (event.metaKey || event.ctrlKey) window.open(path, '_blank', 'noopener');
+                else void navigateRef.current(path);
+                return true;
+              },
               handleDOMEvents: {
-                // Links: Mod-click opens (plain clicks edit). Card chips are handled by CardMentions.
+                // Links never follow their href natively (handled above / by LinkClicks); external
+                // ones also open on Mod-click. Card chips are handled by CardMentions.
                 click: (view: EditorView, event: MouseEvent) => {
                   const a = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
                   if (!a || a.dataset.cardKey) return false;
                   event.preventDefault();
+                  if (inAppPath(a.getAttribute('href')) !== null) return true;
                   if (event.metaKey || event.ctrlKey || !view.editable) window.open(a.href, '_blank', 'noopener');
                   return true;
                 },
@@ -231,6 +256,23 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
         />
       )}
       {uploading > 0 && <div className="pointer-events-none mt-1 text-sm text-fg-faint">Uploading image…</div>}
+      {uploadErrors.length > 0 && (
+        <div role="alert" className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2">
+          {uploadErrors.map((e) => (
+            <div key={e.id} className="pointer-events-auto flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-base shadow-popover">
+              <span className="min-w-0 flex-1 text-danger">{e.message}</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setUploadErrors((list) => list.filter((x) => x.id !== e.id))}
+                className="rounded text-fg-faint hover:text-fg"
+              >
+                <X size="0.875rem" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

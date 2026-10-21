@@ -28,7 +28,7 @@ import {
   usePages,
 } from '../../data/pages';
 import { usePagePresence, type PagePresence } from '../../data/presence';
-import { useWsPath } from '../../data/workspace';
+import { useWorkspaceId, useWsPath } from '../../data/workspace';
 import { useThreads } from '../../data/threads';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -106,6 +106,7 @@ function useWidthStep(ref: RefObject<HTMLElement | null>): number {
 function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const navigate = useNavigate();
   const ws = useWsPath();
+  const wid = useWorkspaceId();
   const save = useAutosave(page);
   const user = useUser();
   const me = useMemo(
@@ -475,7 +476,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                   onCommentClick={activate}
                   onCommentPositions={setPositions}
                   onComment={onComment}
-                  foldStateKey={page.id}
+                  foldStateKey={`${wid}:${page.id}`}
                   onOutline={setOutline}
                 />
               )}
