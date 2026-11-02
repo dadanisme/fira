@@ -12,6 +12,7 @@ import { Input } from '../../components/Input';
 import { Popover } from '../../components/Popover';
 import { cx } from '../../lib/cx';
 import { Board } from './Board';
+import { COLUMN_WIDTH } from './columns';
 import { BoardDataProvider, useBoardData } from './context';
 import { FilterBar } from './FilterBar';
 import { parseFilters } from './filters';
@@ -67,17 +68,17 @@ export default function BoardPage() {
   return (
     <LabelsProvider labels={labels}>
       <BoardDataProvider project={project} cards={cards} labels={labels}>
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="flex h-11 shrink-0 items-center gap-2 pr-4 pl-[calc(1rem+var(--shell-gutter,0rem))]">
-            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-xs font-semibold text-fg-muted">{project.key}</span>
-            <h1 className="truncate text-md font-semibold">{project.name}</h1>
+            <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 font-mono text-xs font-semibold text-fg-muted">{project.key}</span>
+            <h1 className="min-w-0 truncate text-md font-semibold">{project.name}</h1>
             <span className="flex-1" />
             <NewCardButton onCreated={onOpen} />
             <Link
               to={ws(`/settings/projects/${project.key}`)}
               aria-label="Project settings"
               title="Project settings"
-              className="inline-flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
+              className="tap-target inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
             >
               <Settings size="0.9375rem" />
             </Link>
@@ -152,7 +153,7 @@ function NewCardButton({ onCreated }: { onCreated: (key: string) => void }) {
                 aria-checked={type === t}
                 onClick={() => setType(t)}
                 className={cx(
-                  'flex h-6 flex-1 items-center justify-center gap-1 rounded text-sm',
+                  'flex h-6 flex-1 items-center justify-center gap-1 rounded text-sm touch:h-9',
                   type === t ? 'bg-surface font-medium text-fg shadow-card' : 'text-fg-muted hover:text-fg',
                 )}
               >
@@ -188,9 +189,9 @@ function BoardSkeleton() {
 
 function ColumnsSkeleton({ count }: { count: number }) {
   return (
-    <div aria-busy="true" aria-label="Loading board" className="flex gap-3 px-4 pt-1">
+    <div aria-busy="true" aria-label="Loading board" className="flex min-w-0 gap-3 overflow-hidden px-4 pt-1">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="h-48 w-72 shrink-0 animate-pulse rounded-lg bg-sunken/70" />
+        <div key={i} className={cx('h-48 shrink-0 animate-pulse rounded-lg bg-sunken/70', COLUMN_WIDTH)} />
       ))}
     </div>
   );

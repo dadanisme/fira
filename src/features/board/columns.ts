@@ -10,6 +10,12 @@ import { toastError } from './toast';
  * list is shown until the Firestore snapshot echoes it (no snap-back after a drop),
  * and a failed write reverts with a toast.
  */
+/**
+ * Width of a board column (and the add-column slot, skeletons): below md one column fills most
+ * of the screen so the next one peeks (the row snaps column by column); md+ fixed 18rem.
+ */
+export const COLUMN_WIDTH = 'w-[min(85vw,24rem)] md:w-72';
+
 export interface ColumnsApi {
   columns: Column[];
   add(name: string): Column | undefined;

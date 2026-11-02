@@ -58,7 +58,7 @@ export function AddCard({ columnId, lastRank, visibleIds }: { columnId: string; 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md px-1.5 text-sm text-fg-faint hover:bg-hover hover:text-fg-muted"
+          className="mt-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md px-1.5 text-sm text-fg-faint hover:bg-hover hover:text-fg-muted touch:h-10"
         >
           <Plus size="0.875rem" /> Add card
         </button>

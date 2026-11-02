@@ -7,7 +7,7 @@ import { Input } from '../../components/Input';
 import { Menu, MenuItem } from '../../components/Menu';
 import { Popover } from '../../components/Popover';
 import { cx } from '../../lib/cx';
-import { deleteBlockedReason } from './columns';
+import { COLUMN_WIDTH, deleteBlockedReason } from './columns';
 import { justDragged } from './dragClock';
 
 export interface ColumnHeaderProps {
@@ -66,7 +66,7 @@ export function ColumnHeader({
           type="button"
           title="Rename"
           onClick={() => !justDragged() && setEditing(true)}
-          className="h-6 min-w-0 cursor-pointer truncate rounded px-1.5 text-left hover:bg-hover hover:text-fg"
+          className="h-6 min-w-0 cursor-pointer truncate rounded px-1.5 text-left hover:bg-hover hover:text-fg touch:h-8"
         >
           {column.name}
         </button>
@@ -159,7 +159,7 @@ export function AddColumn({ onAdd }: { onAdd: (name: string) => void }) {
   };
 
   return (
-    <div ref={ref} className="w-72 shrink-0">
+    <div ref={ref} className={cx('shrink-0 snap-start', COLUMN_WIDTH)}>
       {open ? (
         <div className="rounded-lg bg-sunken/70 p-1.5">
           <Input
@@ -178,7 +178,7 @@ export function AddColumn({ onAdd }: { onAdd: (name: string) => void }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex h-9 w-full items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-fg-faint hover:bg-sunken/70 hover:text-fg-muted"
+          className="flex h-9 w-full items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-fg-faint hover:bg-sunken/70 hover:text-fg-muted touch:h-11"
         >
           <Plus size="0.875rem" /> Add column
         </button>

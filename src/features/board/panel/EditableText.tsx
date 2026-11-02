@@ -76,5 +76,5 @@ export function EditableText({
   if (multiline) {
     return <textarea {...shared} rows={1} className={cx(shared.className, 'field-sizing-content resize-none py-1')} />;
   }
-  return <input {...shared} type={type === 'number' ? 'text' : type} inputMode={type === 'number' ? 'decimal' : undefined} className={cx(shared.className, 'h-7')} />;
+  return <input {...shared} type={type === 'number' ? 'text' : type} inputMode={type === 'number' ? 'decimal' : undefined} className={cx(shared.className, 'h-7 touch:h-10')} />;
 }

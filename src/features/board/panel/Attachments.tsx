@@ -81,7 +81,7 @@ export function Attachments({ card }: { card: Card }) {
           <button
             type="button"
             onClick={() => input.current?.click()}
-            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-base text-fg-faint hover:bg-hover hover:text-fg-muted"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-base text-fg-faint hover:bg-hover hover:text-fg-muted touch:h-10"
           >
             <Paperclip size="0.8125rem" /> Drop files or click to attach
           </button>
@@ -93,8 +93,8 @@ export function Attachments({ card }: { card: Card }) {
             {uploading.map((u) => (
               <li key={u.id} aria-busy="true" className="flex h-10 items-center gap-2 px-2 text-fg-faint">
                 <span className="size-7 shrink-0 animate-pulse rounded bg-sunken" />
-                <span className="truncate">{u.name}</span>
-                <span className="text-sm">Uploading…</span>
+                <span className="min-w-0 truncate">{u.name}</span>
+                <span className="shrink-0 text-sm">Uploading…</span>
               </li>
             ))}
           </ul>
@@ -126,7 +126,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
   };
 
   return (
-    <li className="group flex h-10 items-center gap-2 rounded-md px-2 hover:bg-hover">
+    <li className="group flex h-10 items-center gap-2 rounded-md px-2 hover:bg-hover touch:h-12 touch:gap-3">
       <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded bg-sunken text-fg-faint">
         {isImage && url ? <img src={url} alt="" loading="lazy" className="size-full object-cover" /> : <FileIcon size="0.875rem" />}
       </span>
@@ -138,7 +138,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         ) : (
           <span className="block truncate">{a.name}</span>
         )}
-        <span className="block text-xs text-fg-faint" title={absoluteTime(a.createdAt)}>
+        <span className="block truncate text-xs text-fg-faint" title={absoluteTime(a.createdAt)}>
           {formatBytes(a.size)} · {a.uploadedBy.name} · {relativeTime(a.createdAt)}
         </span>
       </div>
@@ -147,7 +147,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         onClick={() => downloadAttachment(cardId, a).catch(toastError)}
         aria-label={`Download ${a.name}`}
         title="Download"
-        className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100 touch:opacity-60"
+        className="tap-target inline-flex size-6 shrink-0 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100 touch:opacity-60"
       >
         <Download size="0.8125rem" />
       </button>

@@ -74,7 +74,7 @@ export function SearchList({
           setActive(0);
         }}
         onKeyDown={onKeyDown}
-        className="h-8 border-b border-line bg-transparent px-2.5 text-base text-fg outline-none placeholder:text-fg-faint"
+        className="h-8 border-b border-line bg-transparent px-2.5 text-base text-fg outline-none touch:h-10 placeholder:text-fg-faint"
       />
       <div id={listId} role="listbox" className="flex max-h-72 flex-col overflow-y-auto p-1">
         {shown.map((item, i) => (
@@ -88,7 +88,7 @@ export function SearchList({
             onMouseEnter={() => setActive(i)}
             onClick={() => onPick(item.id)}
             className={cx(
-              'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base text-fg',
+              'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base text-fg touch:h-10',
               i === index && 'bg-hover',
             )}
           >
@@ -155,7 +155,7 @@ export function LabelPicker({
             <button
               type="button"
               onClick={create}
-              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-base text-fg hover:bg-hover"
+              className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-base text-fg hover:bg-hover touch:h-10"
             >
               <Plus size="0.875rem" className="text-fg-muted" />
               <span className="truncate">

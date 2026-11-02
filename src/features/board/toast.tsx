@@ -38,11 +38,11 @@ export function Toasts() {
   const list = useSyncExternalStore(subscribe, () => toasts);
   if (list.length === 0) return null;
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-80">
       {list.map((t) => (
         <div key={t.id} className="pointer-events-auto flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-base shadow-popover">
           <span className="min-w-0 flex-1 text-danger">{t.message}</span>
-          <button type="button" aria-label="Dismiss" onClick={() => dismiss(t.id)} className="rounded text-fg-faint hover:text-fg">
+          <button type="button" aria-label="Dismiss" onClick={() => dismiss(t.id)} className="tap-target rounded text-fg-faint hover:text-fg">
             <X size="0.875rem" />
           </button>
         </div>

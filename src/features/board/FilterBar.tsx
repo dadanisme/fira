@@ -19,7 +19,7 @@ export function FilterBar({ filters }: { filters: Filters }) {
   const selectFields = project.fields.filter((f) => (f.type === 'select' || f.type === 'multiselect') && f.options?.length);
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-4 pb-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-4 pb-2">
       <SearchBox value={filters.q} onChange={(q) => set(q ? withValues(params, 'q', [q]) : withValues(params, 'q', []))} />
       <MultiFilter
         name="Labels"
@@ -93,7 +93,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (q: string) =
   }, [text]);
 
   return (
-    <label className="flex h-6 w-48 items-center gap-1.5 rounded-md border border-line bg-surface px-2 focus-within:border-accent focus-within:ring-2 focus-within:ring-ring">
+    <label className="flex h-6 w-full min-w-0 items-center gap-1.5 rounded-md border border-line bg-surface px-2 focus-within:border-accent focus-within:ring-2 focus-within:ring-ring touch:h-9 md:w-48">
       <Search size="0.75rem" className="shrink-0 text-fg-faint" />
       <input
         type="search"
@@ -145,7 +145,7 @@ function MultiFilter({
           {...props}
           type="button"
           className={cx(
-            'inline-flex h-6 max-w-56 items-center gap-1 rounded-md border px-2 text-sm',
+            'inline-flex h-6 max-w-56 min-w-0 items-center gap-1 rounded-md border px-2 text-sm touch:h-9',
             active ? 'border-accent/50 bg-accent-soft text-fg' : 'border-line text-fg-muted hover:bg-hover hover:text-fg',
           )}
         >
@@ -193,7 +193,7 @@ function Toggle({ on, onChange, icon, children }: { on: boolean; onChange: (on: 
       aria-pressed={on}
       onClick={() => onChange(!on)}
       className={cx(
-        'inline-flex h-6 items-center gap-1 rounded-md px-2 text-sm',
+        'inline-flex h-6 items-center gap-1 rounded-md px-2 text-sm touch:h-9',
         on ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
       )}
     >

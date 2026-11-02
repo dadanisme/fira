@@ -72,7 +72,7 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
           aria-label={`Add ${childType}`}
           title={`Add ${childType}`}
           onClick={() => setAdding(true)}
-          className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
+          className="tap-target inline-flex size-6 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
         >
           <Plus size="0.875rem" />
         </button>
@@ -82,13 +82,13 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
         {children.map((c) => {
           const isDone = c.status === doneId;
           return (
-            <li key={c.id} className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover">
+            <li key={c.id} className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover touch:h-11">
               <input
                 type="checkbox"
                 checked={isDone}
                 onChange={() => toggle(c)}
                 aria-label={`${isDone ? 'Reopen' : 'Complete'} ${c.key}`}
-                className="size-3.5 shrink-0 accent-[var(--accent)]"
+                className="size-3.5 shrink-0 accent-[var(--accent)] touch:size-5"
               />
               <span className="shrink-0 font-mono text-xs text-fg-faint">{c.key}</span>
               <button
@@ -99,7 +99,7 @@ export function Children({ card, onOpen }: { card: Card; onOpen: (key: string) =
                 {c.title || 'Untitled'}
               </button>
               {c.priority !== 'none' && <PriorityIcon priority={c.priority} size="0.8125rem" />}
-              <span className="shrink-0 text-xs text-fg-faint">{project.columns.find((col) => col.id === c.status)?.name}</span>
+              <span className="max-w-24 shrink-0 truncate text-xs text-fg-faint">{project.columns.find((col) => col.id === c.status)?.name}</span>
             </li>
           );
         })}

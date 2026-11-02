@@ -1,10 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Copy, Link2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowDownToLine, ArrowUpToLine, Copy, Link2, MoreHorizontal, X } from 'lucide-react';
 import type { Card } from '@shared/types';
+import { compareRank, rankAfterLast, rankBeforeFirst } from '@shared/rank';
 import { Dialog } from '../../../components/Dialog';
 import { IconButton } from '../../../components/IconButton';
+import { Menu, MenuItem, MenuSeparator } from '../../../components/Menu';
+import { Popover } from '../../../components/Popover';
+import { moveCard } from '../../../data/cards';
 import { useWsPath } from '../../../data/workspace';
-import { patchCard, useBoardData } from '../context';
+import { patchCard, run, useBoardData, type BoardData } from '../context';
+import { PHONE, useMediaQuery } from '../../../lib/useMediaQuery';
 import { TypeIcon } from '../ui';
 import { Attachments } from './Attachments';
 import { CardActivity } from './CardActivity';
@@ -89,7 +94,7 @@ function Breadcrumb({ card, cardKey, onOpen }: { card: Card | undefined; cardKey
         type="button"
         onClick={() => onOpen(c.key)}
         title={c.title}
-        className="max-w-40 truncate rounded px-1 font-mono text-sm text-fg-muted hover:bg-hover hover:text-fg"
+        className="max-w-24 min-w-0 truncate rounded px-1 font-mono text-sm text-fg-muted hover:bg-hover hover:text-fg sm:max-w-40"
       >
         {c.key}
       </button>
@@ -100,33 +105,108 @@ function Breadcrumb({ card, cardKey, onOpen }: { card: Card | undefined; cardKey
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
       {grand && crumb(grand)}
       {parent && crumb(parent)}
-      <span className="flex items-center gap-1 px-1 font-mono text-sm font-medium text-fg">
+      <span className="flex shrink-0 items-center gap-1 px-1 font-mono text-sm font-medium text-fg">
         {card && <TypeIcon type={card.type} />}
         {cardKey}
       </span>
-      {card?.archived && <span className="rounded bg-sunken px-1.5 text-xs text-fg-muted">Archived</span>}
+      {card?.archived && <span className="shrink-0 rounded bg-sunken px-1.5 text-xs text-fg-muted">Archived</span>}
     </nav>
   );
 }
 
+/** Copy key / Copy link / Archive as icons (inside the ⋯ menu on phones), and the ⋯ menu (Move to top/bottom). */
 function Actions({ card }: { card: Card }) {
   const data = useBoardData();
   const ws = useWsPath();
+  const phone = useMediaQuery(PHONE);
   const url = `${location.origin}${ws(`/p/${data.project.key}/${card.key}`)}`;
   const copy = (text: string) => void navigator.clipboard?.writeText(text);
+  const archive = () => patchCard(data, card, { archived: !card.archived });
+  const archiveLabel = card.archived ? 'Unarchive' : 'Archive';
+  const archiveIcon = (size: string) => (card.archived ? <ArchiveRestore size={size} /> : <Archive size={size} />);
   return (
     <>
-      <IconButton label="Copy key" onClick={() => copy(card.key)}>
-        <Copy size="0.875rem" />
-      </IconButton>
-      <IconButton label="Copy link" onClick={() => copy(url)}>
-        <Link2 size="0.875rem" />
-      </IconButton>
-      <IconButton label={card.archived ? 'Unarchive' : 'Archive'} onClick={() => patchCard(data, card, { archived: !card.archived })}>
-        {card.archived ? <ArchiveRestore size="0.875rem" /> : <Archive size="0.875rem" />}
-      </IconButton>
+      {!phone && (
+        <>
+          <IconButton label="Copy key" onClick={() => copy(card.key)}>
+            <Copy size="0.875rem" />
+          </IconButton>
+          <IconButton label="Copy link" onClick={() => copy(url)}>
+            <Link2 size="0.875rem" />
+          </IconButton>
+          <IconButton label={archiveLabel} onClick={archive}>
+            {archiveIcon('0.875rem')}
+          </IconButton>
+        </>
+      )}
+      <Popover
+        placement="bottom-end"
+        className="w-52"
+        trigger={(props) => (
+          <IconButton {...props} label="Card actions">
+            <MoreHorizontal size="0.9375rem" />
+          </IconButton>
+        )}
+      >
+        {() => {
+          const place = columnPlace(data, card);
+          return (
+            <Menu>
+              <MenuItem
+                icon={<ArrowUpToLine size="0.8125rem" />}
+                disabled={!place || place.first}
+                onSelect={() => place && run(() => moveCard(card, place.column, rankBeforeFirst(place.others), data.ctx))}
+              >
+                Move to top
+              </MenuItem>
+              <MenuItem
+                icon={<ArrowDownToLine size="0.8125rem" />}
+                disabled={!place || place.last}
+                onSelect={() => place && run(() => moveCard(card, place.column, rankAfterLast(place.others), data.ctx))}
+              >
+                Move to bottom
+              </MenuItem>
+              {phone && (
+                <>
+                  <MenuSeparator />
+                  <MenuItem icon={<Copy size="0.8125rem" />} onSelect={() => copy(card.key)}>
+                    Copy key
+                  </MenuItem>
+                  <MenuItem icon={<Link2 size="0.8125rem" />} onSelect={() => copy(url)}>
+                    Copy link
+                  </MenuItem>
+                  <MenuItem icon={archiveIcon('0.8125rem')} onSelect={archive}>
+                    {archiveLabel}
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          );
+        }}
+      </Popover>
     </>
   );
+}
+
+/**
+ * The card's board column (an unknown status shows in the first column, as on the board) and
+ * every other card in it, unfiltered (archived and subtasks included), so "top" and "bottom" hold
+ * in any filtered view. `first`/`last`: already strictly above/below all of them.
+ */
+function columnPlace(data: BoardData, card: Card): { column: string; others: Card[]; first: boolean; last: boolean } | null {
+  const columns = data.project.columns;
+  const known = new Set(columns.map((c) => c.id));
+  const fallback = columns[0]?.id;
+  const columnOf = (c: Card) => (known.has(c.status) ? c.status : fallback);
+  const column = columnOf(card);
+  if (!column) return null;
+  const others = data.cards.filter((c) => c.id !== card.id && columnOf(c) === column);
+  return {
+    column,
+    others,
+    first: others.every((c) => compareRank(card.rank, c.rank) < 0),
+    last: others.every((c) => compareRank(card.rank, c.rank) > 0),
+  };
 }
 
 /**

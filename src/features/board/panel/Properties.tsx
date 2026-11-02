@@ -141,7 +141,7 @@ export function Properties({ card }: { card: Card }) {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
-      <dt className="flex h-7 items-center truncate text-fg-muted" title={label}>
+      <dt className="flex h-7 items-center truncate text-fg-muted touch:h-10" title={label}>
         {label}
       </dt>
       <dd className="min-w-0">{children}</dd>
@@ -156,7 +156,7 @@ function Value({ children, wrap, ...props }: Partial<PopoverTriggerProps> & { ch
       type="button"
       {...props}
       className={cx(
-        'flex min-h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-fg hover:bg-hover',
+        'flex min-h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-fg hover:bg-hover touch:min-h-10',
         wrap && 'flex-wrap py-1',
       )}
     >
@@ -208,7 +208,7 @@ function DateValue({
             onKeyDown={(e) => {
               if (e.key === 'Enter') close();
             }}
-            className="h-7 rounded-md border border-line bg-surface px-2 text-base text-fg outline-none focus:border-accent"
+            className="h-7 rounded-md border border-line bg-surface px-2 text-base text-fg outline-none focus:border-accent touch:h-10"
           />
           <div className="flex gap-1">
             {(['Today', 'Tomorrow'] as const).map((label, i) => (
@@ -221,7 +221,7 @@ function DateValue({
                   onChange(d.toLocaleDateString('en-CA'));
                   close();
                 }}
-                className="h-6 flex-1 rounded-md text-sm text-fg-muted hover:bg-hover hover:text-fg"
+                className="h-6 flex-1 rounded-md text-sm text-fg-muted hover:bg-hover hover:text-fg touch:h-9"
               >
                 {label}
               </button>
@@ -233,7 +233,7 @@ function DateValue({
                   onChange(null);
                   close();
                 }}
-                className="h-6 flex-1 rounded-md text-sm text-danger hover:bg-hover"
+                className="h-6 flex-1 rounded-md text-sm text-danger hover:bg-hover touch:h-9"
               >
                 Clear
               </button>
@@ -283,7 +283,7 @@ export function FieldEditor({
               rel="noreferrer"
               aria-label={`Open ${def.name}`}
               title="Open link"
-              className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
+              className="tap-target inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
             >
               <ExternalLink size="0.8125rem" />
             </a>
@@ -293,13 +293,13 @@ export function FieldEditor({
     }
     case 'checkbox':
       return (
-        <label className="flex h-7 items-center px-2">
+        <label className="flex h-7 items-center px-2 touch:h-10">
           <input
             type="checkbox"
             aria-label={def.name}
             checked={value === true}
             onChange={(e) => onChange(e.target.checked ? true : null)}
-            className="size-3.5 accent-[var(--accent)]"
+            className="size-3.5 accent-[var(--accent)] touch:size-5"
           />
         </label>
       );

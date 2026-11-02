@@ -61,7 +61,7 @@ function Composer({ cardId }: { cardId: string }) {
         className="min-h-10 px-2.5 py-2 text-base"
       />
       <div className="flex items-center justify-end gap-2 px-2 pb-2">
-        <span className="text-xs text-fg-faint">⌘↵ to send</span>
+        <span className="text-xs text-fg-faint touch:hidden">⌘↵ to send</span>
         <Button size="sm" variant="primary" disabled={empty} onClick={submit}>
           Comment
         </Button>
@@ -84,15 +84,15 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
     <li className="group flex gap-2">
       <Avatar actor={c.author} size={20} className="mt-0.5" />
       <div className="min-w-0 flex-1">
-        <div className="flex h-5 items-center gap-1.5 text-sm">
-          <span className="font-medium text-fg">{actorName(c.author)}</span>
-          <span className="text-fg-faint" title={absoluteTime(c.createdAt)}>
+        <div className="flex h-5 min-w-0 items-center gap-1.5 text-sm">
+          <span className="min-w-0 truncate font-medium text-fg">{actorName(c.author)}</span>
+          <span className="shrink-0 text-fg-faint" title={absoluteTime(c.createdAt)}>
             {relativeTime(c.createdAt)}
             {c.updatedAt && ' (edited)'}
           </span>
           <span className="flex-1" />
           {mine && !editing && (
-            <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:opacity-60">
+            <span className="flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:gap-4 touch:opacity-60">
               <IconButton
                 size="sm"
                 label="Edit comment"

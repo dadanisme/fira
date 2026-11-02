@@ -31,7 +31,7 @@ export function WorkPage({ card }: { card: Card }) {
   return (
     <Section title="Work page">
       {card.pageId ? (
-        <div className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover">
+        <div className="group flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover touch:h-11 touch:gap-3">
           <span className="flex w-4 shrink-0 justify-center text-fg-muted">{page?.icon ?? <FileText size="0.875rem" />}</span>
           <Link to={ws(`/d/${card.pageId}`)} className="min-w-0 flex-1 truncate hover:underline">
             {page ? page.title || 'Untitled' : loading ? '' : 'Missing page'}
@@ -39,7 +39,7 @@ export function WorkPage({ card }: { card: Card }) {
           </Link>
           <Link
             to={ws(`/d/${card.pageId}`)}
-            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg"
+            className="tap-target inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg"
           >
             Open <ArrowUpRight size="0.75rem" />
           </Link>

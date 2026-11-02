@@ -63,7 +63,7 @@ export function MenuItem({ onSelect, children, icon, selected, danger, disabled,
         if (!keepOpen) close();
       }}
       className={cx(
-        'flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base outline-none',
+        'flex h-7 touch:h-10 w-full shrink-0 items-center gap-2 rounded-md px-2 text-left text-base outline-none',
         'hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50',
         title && 'disabled:pointer-events-none',
         danger ? 'text-danger' : 'text-fg',

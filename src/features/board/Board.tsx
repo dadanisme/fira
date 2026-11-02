@@ -11,6 +11,7 @@ import {
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
+  type AutoScrollOptions,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -26,10 +27,11 @@ import { byRank, compareRank, rankAtIndex } from '@shared/rank';
 import { moveCard } from '../../data/cards';
 import { cx } from '../../lib/cx';
 import { useDndSensors } from '../../lib/dndSensors';
+import { NARROW, useMediaQuery } from '../../lib/useMediaQuery';
 import { AddCard } from './AddCard';
 import { CardTile } from './CardTile';
 import { AddColumn, ColumnHeader } from './ColumnHeader';
-import { columnCardCounts, useColumns, type ColumnsApi } from './columns';
+import { COLUMN_WIDTH, columnCardCounts, useColumns, type ColumnsApi } from './columns';
 import { markDragEnd } from './dragClock';
 import { cardMatcher, type Filters } from './filters';
 import { useBoardData, type BoardData } from './context';
@@ -39,6 +41,13 @@ const KEYBOARD: KeyboardSensorOptions = {
   coordinateGetter: sortableKeyboardCoordinates,
   keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter'] },
 };
+
+/**
+ * Phone carousel: dnd-kit's default edge auto-scroll (20% zones, acceleration 10) flies past
+ * several ~85vw columns while a finger rests on the peeking next one; slower and narrower zones
+ * move about a column per half second.
+ */
+const NARROW_AUTO_SCROLL: AutoScrollOptions = { threshold: { x: 0.12, y: 0.2 }, acceleration: 3 };
 
 type Move = { status: string; rank: string };
 
@@ -136,6 +145,7 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
 
   // ------------------------------------------------ drag and drop
   const sensors = useDndSensors(4, KEYBOARD);
+  const narrow = useMediaQuery(NARROW);
   const [drag, setDrag] = useState<{ id: string; columns: Record<string, string[]> } | null>(null);
   const [columnDrag, setColumnDrag] = useState<string | null>(null);
 
@@ -249,12 +259,22 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
+      autoScroll={narrow ? NARROW_AUTO_SCROLL : undefined}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
     >
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 pt-1 pb-4">
+      {/*
+        Below md the row is a snap carousel (one ~85vw column at a time, the next one peeking).
+        Snapping is off while dragging: mandatory snap fights dnd-kit's auto-scroll across columns.
+      */}
+      <div
+        className={cx(
+          'flex min-h-0 min-w-0 flex-1 gap-3 overflow-x-auto overscroll-x-contain px-4 pt-1 pb-4',
+          !drag && !columnDrag && 'snap-x snap-mandatory scroll-px-4 md:snap-none',
+        )}
+      >
         <SortableContext items={columnSortIds} strategy={horizontalListSortingStrategy}>
           {columns.map((col) => (
             <BoardColumn
@@ -343,7 +363,8 @@ const BoardColumn = memo(function BoardColumn({
       aria-label={column.name}
       style={{ transform: CSS.Translate.toString(sortable.transform), transition: sortable.transition }}
       className={cx(
-        'flex w-72 shrink-0 flex-col rounded-lg bg-sunken/70',
+        'flex shrink-0 snap-start flex-col rounded-lg bg-sunken/70',
+        COLUMN_WIDTH,
         sortable.isDragging && 'relative z-10 shadow-popover ring-1 ring-line',
       )}
     >
@@ -358,7 +379,7 @@ const BoardColumn = memo(function BoardColumn({
         handleAttributes={sortable.attributes}
         handleListeners={sortable.listeners}
       />
-      <div className={cx('flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-2', droppable.isOver && 'bg-hover/50')}>
+      <div className={cx('flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain px-2 pb-2', droppable.isOver && 'bg-hover/50')}>
         <SortableContext id={column.id} items={ids} strategy={verticalListSortingStrategy}>
           <div className="flex flex-col gap-1.5">
             {list.map((card) => (
