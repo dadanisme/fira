@@ -18,7 +18,7 @@ export function IconButton({ label, children, size = 'md', active, className, ty
       aria-label={label}
       title={label}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg',
+        'tap-target inline-flex shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg',
         'disabled:pointer-events-none disabled:opacity-50',
         size === 'sm' ? 'size-5' : 'size-7',
         active && 'bg-active text-fg',

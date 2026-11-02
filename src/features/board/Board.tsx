@@ -3,14 +3,11 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
   pointerWithin,
   rectIntersection,
   useDroppable,
-  useSensor,
-  useSensors,
   type CollisionDetection,
+  type KeyboardSensorOptions,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -28,6 +25,7 @@ import type { Card, Column } from '@shared/types';
 import { byRank, compareRank, rankAtIndex } from '@shared/rank';
 import { moveCard } from '../../data/cards';
 import { cx } from '../../lib/cx';
+import { useDndSensors } from '../../lib/dndSensors';
 import { AddCard } from './AddCard';
 import { CardTile } from './CardTile';
 import { AddColumn, ColumnHeader } from './ColumnHeader';
@@ -36,6 +34,11 @@ import { markDragEnd } from './dragClock';
 import { cardMatcher, type Filters } from './filters';
 import { useBoardData, type BoardData } from './context';
 import { toastError } from './toast';
+
+const KEYBOARD: KeyboardSensorOptions = {
+  coordinateGetter: sortableKeyboardCoordinates,
+  keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter'] },
+};
 
 type Move = { status: string; rank: string };
 
@@ -132,13 +135,7 @@ export function Board({ filters, selectedKey, onOpen }: BoardProps) {
   }, [cards, columns, moves, matcher]);
 
   // ------------------------------------------------ drag and drop
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter'] },
-    }),
-  );
+  const sensors = useDndSensors(4, KEYBOARD);
   const [drag, setDrag] = useState<{ id: string; columns: Record<string, string[]> } | null>(null);
   const [columnDrag, setColumnDrag] = useState<string | null>(null);
 

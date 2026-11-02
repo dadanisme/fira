@@ -4,9 +4,6 @@ import {
   closestCenter,
   DndContext,
   DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragMoveEvent,
   type DragStartEvent,
@@ -34,6 +31,7 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../../components/Menu'
 import { Popover } from '../../components/Popover';
 import { preloadMarkdownEditor } from '../../components/MarkdownEditor';
 import { cx } from '../../lib/cx';
+import { useDndSensors } from '../../lib/dndSensors';
 import { remPx } from '../../lib/rem';
 import { addPage, addPageFromTemplate, duplicate, pageTitle, renamePage } from './actions';
 import { ancestors, childrenMap, dropRank, flatten, project, type FlatItem, type Projection } from './tree';
@@ -177,7 +175,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
   const items = useMemo(() => flatten(children, expanded, dragId), [children, expanded, dragId]);
   const projection: Projection | null = dragId && overId ? project(items, dragId, overId, offsetX, INDENT * remPx()) : null;
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useDndSensors(5);
 
   const reset = () => {
     setDragId(null);
@@ -267,7 +265,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cx('group/row relative', isDragging && 'opacity-40')}
+      className={cx('group/row drag-source relative', isDragging && 'opacity-40')}
       onContextMenu={onContextMenu}
       onPointerEnter={preloadMarkdownEditor}
       {...attributes}
@@ -315,7 +313,7 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
             {pageTitle(page)}
           </Link>
         )}
-        <div className={cx('flex items-center', !menuOpen && 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100')}>
+        <div className={cx('flex items-center', !menuOpen && 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 touch:opacity-60')}>
           <Popover
             open={menuOpen}
             onOpenChange={setMenuOpen}

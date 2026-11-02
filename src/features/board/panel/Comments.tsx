@@ -92,7 +92,7 @@ const CommentItem = memo(function CommentItem({ cardId, comment: c, mine }: { ca
           </span>
           <span className="flex-1" />
           {mine && !editing && (
-            <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+            <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:opacity-60">
               <IconButton
                 size="sm"
                 label="Edit comment"

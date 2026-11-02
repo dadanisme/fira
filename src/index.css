@@ -1,6 +1,13 @@
 @import 'tailwindcss';
 
 /*
+ * `touch:` = devices without hover (phones, tablets): @media (hover: none). Tailwind's own `hover:`
+ * and `group-hover:` never match there, so hover-revealed controls (opacity-0 group-hover:opacity-100)
+ * also take `touch:opacity-60`: always visible, muted. Desktop is unaffected.
+ */
+@custom-variant touch (@media (hover: none));
+
+/*
  * Design tokens. Components use them through the Tailwind theme below
  * (bg-surface, text-fg-muted, border-line, ...), never raw colors.
  * Dark mode: <html data-theme="dark">, resolved from the OS or the stored choice (src/lib/theme.ts).
@@ -165,5 +172,73 @@
   }
   ::selection {
     background: var(--accent-soft);
+  }
+}
+
+/*
+ * Draggable elements (board cards, tree rows): on touch a long-press starts the drag, so no iOS
+ * link callout or text selection there; touch-action stays `manipulation` (not none) so they still scroll.
+ */
+@utility drag-source {
+  touch-action: manipulation;
+  @media (hover: none) {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/*
+ * Touch hit area of at least 2.25rem (≈41px) around a small control, without changing its layout:
+ * an invisible centered ::after. Used by IconButton and Button.
+ */
+@utility tap-target {
+  @media (hover: none) {
+    &:where(:not(.absolute, .fixed, .sticky)) {
+      position: relative;
+    }
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 2.4rem);
+      height: max(100%, 2.4rem);
+      translate: -50% -50%;
+    }
+  }
+}
+
+/* Popover panel: never wider or taller than the viewport (callers' w-80 etc. still apply; any utility overrides). */
+@layer components {
+  .popover-panel {
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+  }
+}
+
+/*
+ * iOS zooms into a focused field whose text is under 16px, and the small type tokens are 11.5–15px.
+ * On touch, fields render the small tokens at --text-md (16.2px); fields without a size class get at
+ * least that. The editor (contenteditable, .md-compact = --text-base) likewise.
+ */
+@media (hover: none) {
+  :is(input, textarea, select) {
+    --text-2xs: var(--text-md);
+    --text-xs: var(--text-md);
+    --text-sm: var(--text-md);
+    --text-base: var(--text-md);
+  }
+  [contenteditable='true'] {
+    --text-base: var(--text-md);
+  }
+}
+@layer base {
+  @media (hover: none) {
+    :is(input, textarea, select) {
+      font-size: max(1em, var(--text-md));
+    }
   }
 }

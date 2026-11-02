@@ -147,7 +147,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         onClick={() => downloadAttachment(cardId, a).catch(toastError)}
         aria-label={`Download ${a.name}`}
         title="Download"
-        className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100"
+        className="inline-flex size-6 items-center justify-center rounded-md text-fg-muted opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg focus-visible:opacity-100 touch:opacity-60"
       >
         <Download size="0.8125rem" />
       </button>
@@ -155,7 +155,7 @@ function AttachmentRow({ cardId, attachment: a }: { cardId: string; attachment: 
         size="sm"
         label={`Delete ${a.name}`}
         onClick={remove}
-        className="size-6 opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
+        className="size-6 opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 touch:opacity-60"
       >
         <Trash size="0.8125rem" />
       </IconButton>

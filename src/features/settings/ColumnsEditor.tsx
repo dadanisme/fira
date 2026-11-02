@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { closestCenter, DndContext, type DragEndEvent, type KeyboardSensorOptions } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, Trash } from 'lucide-react';
@@ -13,6 +13,9 @@ import { columnCardCounts, deleteBlockedReason, useColumns } from '../board/colu
 import { EditableText } from '../board/panel/EditableText';
 import { RowList, SettingsSection } from './ui';
 import { confirmAction } from '../../components/ConfirmDialog';
+import { useDndSensors } from '../../lib/dndSensors';
+
+const KEYBOARD: KeyboardSensorOptions = { coordinateGetter: sortableKeyboardCoordinates };
 
 export function ColumnsEditor({ project }: { project: Project }) {
   const { data: cards } = useCards(project.id);
@@ -20,10 +23,7 @@ export function ColumnsEditor({ project }: { project: Project }) {
   const [name, setName] = useState('');
   const { columns, add: addColumn, rename, remove, move } = useColumns(project);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useDndSensors(4, KEYBOARD);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (over) move(String(active.id), String(over.id));
@@ -92,7 +92,7 @@ function ColumnRow({
         aria-label={`Reorder ${column.name}`}
         {...attributes}
         {...listeners}
-        className="flex size-6 cursor-grab items-center justify-center rounded text-fg-faint hover:bg-hover hover:text-fg-muted active:cursor-grabbing"
+        className="drag-source flex size-6 cursor-grab items-center justify-center rounded text-fg-faint hover:bg-hover hover:text-fg-muted active:cursor-grabbing"
       >
         <GripVertical size="0.875rem" />
       </button>

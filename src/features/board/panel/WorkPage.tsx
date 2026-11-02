@@ -46,7 +46,7 @@ export function WorkPage({ card }: { card: Card }) {
           <IconButton
             size="sm"
             label="Unlink work page"
-            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 touch:opacity-60"
             onClick={() => patchCard(data, card, { pageId: null })}
           >
             <Unlink size="0.75rem" />

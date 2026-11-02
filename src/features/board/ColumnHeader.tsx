@@ -50,7 +50,7 @@ export function ColumnHeader({
       className={cx(
         'group/header flex h-9 shrink-0 items-center gap-1 rounded-t-lg px-1.5 text-sm font-medium text-fg-muted outline-none',
         'focus-visible:ring-2 focus-visible:ring-ring',
-        !editing && 'cursor-grab active:cursor-grabbing',
+        !editing && 'drag-source cursor-grab active:cursor-grabbing',
       )}
     >
       {editing ? (
@@ -81,7 +81,7 @@ export function ColumnHeader({
             {...props}
             label={`${column.name} actions`}
             onPointerDown={(e) => e.stopPropagation()}
-            className="size-6 opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+            className="size-6 opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 touch:opacity-60"
           >
             <MoreHorizontal size="0.875rem" />
           </IconButton>

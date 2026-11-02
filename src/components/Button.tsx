@@ -28,7 +28,7 @@ export function Button({ variant = 'secondary', size = 'md', icon, className, ch
     <button
       type={type}
       className={cx(
-        'inline-flex shrink-0 items-center justify-center rounded-md font-medium whitespace-nowrap transition-colors select-none',
+        'tap-target inline-flex shrink-0 items-center justify-center rounded-md font-medium whitespace-nowrap transition-colors select-none',
         'disabled:pointer-events-none disabled:opacity-50',
         variants[variant],
         sizes[size],

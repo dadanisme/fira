@@ -66,7 +66,7 @@ export function Sidebar() {
           aria-expanded={!pinnable}
           aria-controls="app-sidebar"
           onClick={pinnable ? s.expand : s.collapse}
-          className={cx(!s.narrow && !pinnable && 'opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100')}
+          className={cx(!s.narrow && !pinnable && 'opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100 touch:opacity-60')}
         >
           {pinnable ? <PanelLeftOpen size="0.9375rem" /> : <PanelLeftClose size="0.9375rem" />}
         </IconButton>

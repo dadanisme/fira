@@ -45,6 +45,8 @@ const MARGIN = 8;
 
 /**
  * Anchored floating panel rendered in a portal (never clipped by scroll containers).
+ * Never larger than the viewport (.popover-panel in index.css): a w-80 panel shrinks on a phone
+ * and tall content scrolls.
  * Closes on outside pointer down and Escape. Nested popovers work: clicks inside a
  * child portal count as inside (React events bubble through portals).
  */
@@ -73,7 +75,11 @@ export function Popover({ trigger, children, placement = 'bottom-start', open: o
     const fitsBelow = a.bottom + GAP + h <= innerHeight - MARGIN;
     const top = fitsBelow || a.top - GAP - h < MARGIN ? a.bottom + GAP : a.top - GAP - h;
     const left = placement === 'bottom-end' ? a.right - w : a.left;
-    setPos({ top, left: Math.max(MARGIN, Math.min(left, innerWidth - w - MARGIN)) });
+    // .popover-panel caps the size to the viewport, so clamping keeps the whole panel on-screen.
+    setPos({
+      top: Math.max(MARGIN, Math.min(top, innerHeight - h - MARGIN)),
+      left: Math.max(MARGIN, Math.min(left, innerWidth - w - MARGIN)),
+    });
   }, [placement]);
 
   useLayoutEffect(() => {
@@ -125,7 +131,7 @@ export function Popover({ trigger, children, placement = 'bottom-start', open: o
               ref={panel}
               role="dialog"
               onPointerDown={() => (insidePointer.current = true)}
-              className={cx('fixed z-50 min-w-40 rounded-lg bg-surface text-fg shadow-popover', className)}
+              className={cx('popover-panel fixed z-50 min-w-40 rounded-lg bg-surface text-fg shadow-popover', className)}
               style={pos ?? { top: 0, left: 0, opacity: 0 }}
             >
               {typeof children === 'function' ? children({ close }) : children}

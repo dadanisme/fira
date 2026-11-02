@@ -422,7 +422,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                   )}
                 />
               ) : (
-                <div className="mb-1 h-7 opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100">
+                <div className="mb-1 h-7 opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100 touch:opacity-60">
                   <IconPicker
                     onChange={setIcon}
                     trigger={(props) => (

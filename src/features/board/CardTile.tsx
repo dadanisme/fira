@@ -74,7 +74,7 @@ export const CardTile = memo(function CardTile({
       {...dragListeners}
       aria-current={selected ? 'true' : undefined}
       className={cx(
-        'group block rounded-md border bg-surface px-2.5 py-2 text-left shadow-card outline-none select-none',
+        'group drag-source block rounded-md border bg-surface px-2.5 py-2 text-left shadow-card outline-none select-none',
         'focus-visible:ring-2 focus-visible:ring-ring',
         selected ? 'border-accent' : 'border-line hover:border-line-strong',
         ghost && 'opacity-40',
