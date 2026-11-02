@@ -269,7 +269,7 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
       )}
       {uploading > 0 && <div className="pointer-events-none mt-1 text-sm text-fg-faint">Uploading image…</div>}
       {uploadErrors.length > 0 && (
-        <div role="alert" className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2">
+        <div role="alert" className="pointer-events-none fixed right-4 bottom-4 z-[60] mr-safe mb-safe flex w-80 flex-col gap-2">
           {uploadErrors.map((e) => (
             <div key={e.id} className="pointer-events-auto flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-base shadow-popover">
               <span className="min-w-0 flex-1 text-danger">{e.message}</span>

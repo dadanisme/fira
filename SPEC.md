@@ -13,6 +13,7 @@ Primary goal: **speed**. Board must render from local cache instantly; every edi
 - **Vercel**: one project serving the static SPA + Node.js serverless functions in `/api` (REST API, using `firebase-admin`). SPA fallback rewrite to `index.html` for non-`/api` paths.
 - **Tiptap** editor (lazy loaded) with Markdown in/out. Markdown is the stored format everywhere (card descriptions, comments, pages).
 - **dnd-kit** for drag and drop. Fractional indexing (`fractional-indexing` package) for ordering (`rank` strings).
+- **vite-plugin-pwa** (generateSW / Workbox): web manifest + an app-shell service worker (see [Install](#install-pwa)).
 - Package manager: **npm**. Node 22.
 
 ## Repo layout
@@ -141,6 +142,14 @@ Everything but tokens and slug reservations lives under its workspace: `W = work
 - Trash: trashing a page trashes its subtree; restore; delete forever.
 - "Create page from template".
 - Phones (below `md`, 768px): breadcrumbs show only the parent (ancestors above it behind "…"), presence shows 2 faces + "+N", version history and the resolved-comments toggle move into the "More" menu; comments and version history open as full-screen sheets with a close button (history: list, then the picked version's preview with a back button); the table of contents stays a popover. Wide tables and code blocks scroll inside their own box, never the page.
+
+## Install (PWA)
+
+- **Installable**: `manifest.webmanifest` (built by vite-plugin-pwa from `vite.config.ts`; name/short_name `fira`, `start_url` and `scope` `/`, `display: standalone`, theme/background `#ffffff` = the light `--bg`), icons `icon-192.png`, `icon-512.png` (any) and `icon-maskable-512.png` (maskable, glyph inside the safe zone; sources in `brand/`). `index.html` links the apple-touch icon and sets the `apple-mobile-web-app-*` metas (status bar `default`) next to the light/dark `theme-color` metas.
+- **Service worker** (`/sw.js`, production builds only; never in dev or against the emulators, where any leftover worker is unregistered): precaches the built app shell only (`index.html`, every JS/CSS chunk including lazy routes, icons, manifest), so the app opens instantly and offline shows the app (sign-in gate or the cached UI) instead of the browser's error page. Navigations fall back to the cached `index.html`, except `/api/*`, `/__/*` (Firebase auth handler paths) and `/docs/api`. No runtime caching: Firestore, Storage, Google sign-in and the REST API always go to the network (cross-origin requests are never touched); data is online-only apart from the Firestore SDK's own cache.
+- **Updates**: the worker skips waiting and claims open pages, and old precache entries are dropped, so a deploy is live on the next launch or reload with no manual cache clearing; the page re-checks for a new worker whenever it becomes visible. A page still on the old build whose lazy chunk is gone (`vite:preloadError`) reloads once onto the new build (not again within 10 s, so a genuinely broken chunk surfaces as an error instead of a loop).
+- **Install fira** (account menu at the bottom of the sidebar): shown only when not running installed (`display-mode: standalone` / `navigator.standalone`). Where the browser fired `beforeinstallprompt` (Chromium; captured at startup, its mini-infobar suppressed) it opens the browser's install dialog; on iOS/iPadOS (no prompt API) it opens a dialog: tap Share, then Add to Home Screen. Hidden elsewhere and after `appinstalled`. No install banners.
+- **Safe areas**: `viewport-fit=cover`; the app root pads by `env(safe-area-inset-*)`, and fixed UI pads itself (sidebar drawer, full-screen dialogs and bottom sheets, version history, toasts, popover clamping) with the `pt-safe`/`pb-safe`/`px-safe`/`m*-safe` utilities in `src/index.css`. Insets are 0 on desktop and non-notched screens.
 
 ## REST API (`/api/v1`)
 

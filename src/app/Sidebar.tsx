@@ -1,17 +1,19 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronsUpDown, LayoutGrid, LogOut, Mail, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
+import { ChevronsUpDown, Download, LayoutGrid, LogOut, Mail, PanelLeftClose, PanelLeftOpen, Plus, Settings } from 'lucide-react';
 import { wsPath } from '@shared/workspaces';
 import { useProjects } from '../data/projects';
 import { useMyInvites, useMyMemberships } from '../data/members';
 import { useWorkspace, useWsPath } from '../data/workspace';
 import { signOutUser, useUser } from '../lib/auth';
+import { promptInstall, useInstallMethod } from '../lib/install';
 import { Avatar } from '../components/Avatar';
 import { IconButton } from '../components/IconButton';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '../components/Menu';
 import { Popover } from '../components/Popover';
 import { WorkspaceIcon } from '../components/WorkspaceIcon';
 import { cx } from '../lib/cx';
+import { InstallDialog } from './InstallDialog';
 import type { LandingState } from './Landing';
 import { NewProjectForm } from './NewProjectForm';
 import { SidebarLink, SidebarSection } from './SidebarSection';
@@ -48,7 +50,7 @@ export function Sidebar() {
         'flex w-[var(--sidebar-w)] flex-col bg-sidebar outline-none',
         'transition-[width,translate] duration-[120ms] ease-out motion-reduce:transition-none group-data-resizing/shell:transition-none',
         s.narrow
-          ? 'fixed inset-y-0 left-0 z-40 max-w-[85vw] border-r border-line'
+          ? 'fixed inset-y-0 left-0 z-40 max-w-[85vw] border-r border-line pt-safe pb-safe pl-safe'
           : s.floating
             ? 'fixed top-11 bottom-2 left-0 z-40 overflow-hidden rounded-r-lg border border-l-0 border-line'
             : 'absolute inset-y-0 left-0 z-10 border-r border-line',
@@ -132,22 +134,36 @@ function ProjectsSection() {
 
 function UserMenu() {
   const user = useUser();
+  const install = useInstallMethod();
+  /** iOS install instructions: open, closing (exit animation), or unmounted. */
+  const [howTo, setHowTo] = useState<'open' | 'closing' | null>(null);
   return (
-    <Popover
-      placement="bottom-end"
-      trigger={(props) => (
-        <button {...props} type="button" aria-label="Account" className="tap-target flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-hover">
-          <Avatar actor={{ type: 'user', id: user.uid, name: user.displayName ?? user.email ?? '?' }} />
-        </button>
-      )}
-    >
-      <Menu>
-        <div className="px-2 py-1.5 text-sm text-fg-muted">{user.email}</div>
-        <MenuItem icon={<LogOut size="0.875rem" />} onSelect={() => void signOutUser()}>
-          Sign out
-        </MenuItem>
-      </Menu>
-    </Popover>
+    <>
+      <Popover
+        placement="bottom-end"
+        trigger={(props) => (
+          <button {...props} type="button" aria-label="Account" className="tap-target flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-hover">
+            <Avatar actor={{ type: 'user', id: user.uid, name: user.displayName ?? user.email ?? '?' }} />
+          </button>
+        )}
+      >
+        <Menu>
+          <div className="px-2 py-1.5 text-sm text-fg-muted">{user.email}</div>
+          {install && (
+            <MenuItem
+              icon={<Download size="0.875rem" />}
+              onSelect={() => (install === 'prompt' ? void promptInstall().catch(console.error) : setHowTo('open'))}
+            >
+              Install fira
+            </MenuItem>
+          )}
+          <MenuItem icon={<LogOut size="0.875rem" />} onSelect={() => void signOutUser()}>
+            Sign out
+          </MenuItem>
+        </Menu>
+      </Popover>
+      {howTo && <InstallDialog open={howTo === 'open'} onClose={() => setHowTo('closing')} onExited={() => setHowTo(null)} />}
+    </>
   );
 }
 

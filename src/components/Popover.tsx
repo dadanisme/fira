@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../lib/cx';
+import { safeAreaInsets } from '../lib/safeArea';
 
 export interface PopoverTriggerProps {
   ref: RefCallback<HTMLElement>;
@@ -72,13 +73,17 @@ export function Popover({ trigger, children, placement = 'bottom-start', open: o
     const p = panel.current;
     if (!a || !p) return;
     const { offsetWidth: w, offsetHeight: h } = p;
-    const fitsBelow = a.bottom + GAP + h <= innerHeight - MARGIN;
-    const top = fitsBelow || a.top - GAP - h < MARGIN ? a.bottom + GAP : a.top - GAP - h;
+    // Clamp to the viewport minus the safe-area insets (notch, home indicator; 0 on desktop).
+    const inset = safeAreaInsets();
+    const minTop = MARGIN + inset.top;
+    const maxBottom = innerHeight - MARGIN - inset.bottom;
+    const fitsBelow = a.bottom + GAP + h <= maxBottom;
+    const top = fitsBelow || a.top - GAP - h < minTop ? a.bottom + GAP : a.top - GAP - h;
     const left = placement === 'bottom-end' ? a.right - w : a.left;
-    // .popover-panel caps the size to the viewport, so clamping keeps the whole panel on-screen.
+    // .popover-panel caps the size to the safe viewport, so clamping keeps the whole panel on-screen.
     setPos({
-      top: Math.max(MARGIN, Math.min(top, innerHeight - h - MARGIN)),
-      left: Math.max(MARGIN, Math.min(left, innerWidth - w - MARGIN)),
+      top: Math.max(minTop, Math.min(top, maxBottom - h)),
+      left: Math.max(MARGIN + inset.left, Math.min(left, innerWidth - w - MARGIN - inset.right)),
     });
   }, [placement]);
 

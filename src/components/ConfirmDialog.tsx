@@ -114,7 +114,7 @@ function ConfirmDialog({ request: r, open, onExited }: { request: Pending; open:
   };
 
   return (
-    <Dialog open={open} onClose={cancel} onExited={onExited} labelledBy={titleId} className="max-sm:mt-auto max-sm:h-auto max-sm:rounded-t-xl sm:w-[26rem]">
+    <Dialog open={open} onClose={cancel} onExited={onExited} labelledBy={titleId} sheet className="sm:w-[26rem]">
       <form onSubmit={submit} className="flex flex-col gap-3 p-4">
         <h2 id={titleId} className="text-md font-semibold">
           {r.title}

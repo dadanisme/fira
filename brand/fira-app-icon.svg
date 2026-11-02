@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- App icon: brand/fira-mark.svg in white on a solid near-black tile. Renders public/apple-touch-icon.png and public/icon-512.png. -->
+  <!-- App icon: brand/fira-mark.svg in white on a solid near-black tile. Renders public/apple-touch-icon.png, public/icon-192.png and public/icon-512.png. -->
   <rect width="1024" height="1024" fill="#0B0B0C" />
   <g transform="translate(192 192) scale(10)">
     <g fill="#FFFFFF">

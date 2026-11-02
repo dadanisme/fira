@@ -33,7 +33,7 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
       <div
         role="dialog"
         aria-label="Version history"
-        className="relative flex h-full w-full max-w-230 bg-bg pb-[env(safe-area-inset-bottom)] shadow-popover"
+        className="relative flex h-full w-full max-w-230 bg-bg pt-safe pr-safe pb-safe shadow-popover"
       >
         <div
           className={cx('flex w-64 shrink-0 flex-col border-r border-line bg-sidebar max-md:w-full max-md:border-r-0', previewing && 'max-md:hidden')}

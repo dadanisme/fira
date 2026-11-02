@@ -14,6 +14,8 @@ export interface DialogProps {
   returnFocus?(): HTMLElement | null | undefined;
   /** Full-screen at every width (a sheet), not only below `sm`. */
   fullScreen?: boolean;
+  /** Below `sm`, a bottom sheet (content height, rounded top) instead of full-screen. */
+  sheet?: boolean;
   className?: string;
   ref?: Ref<HTMLDivElement>;
   children: ReactNode;
@@ -38,7 +40,7 @@ function isTextEntry(el: EventTarget | null): el is HTMLElement {
  * left (focus moves to the dialog) and a second Escape closes. Popovers opened from
  * inside portal in after the dialog, so they stack above it and may take focus.
  */
-export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, fullScreen, className, ref, children }: DialogProps) {
+export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, fullScreen, sheet, className, ref, children }: DialogProps) {
   const root = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const latest = useRef({ onClose, onExited, returnFocus });
@@ -139,6 +141,10 @@ export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, fullS
         className={cx(
           'relative flex h-dvh w-full flex-col bg-bg shadow-popover outline-none',
           'transition-[opacity,translate,scale] motion-reduce:transition-none starting:translate-y-2 starting:opacity-0',
+          // Edge to edge: clear of the notch, status bar and home indicator (safe-area utilities, index.css).
+          fullScreen ? 'px-safe pt-safe pb-safe'
+          : sheet ? 'max-sm:mt-auto max-sm:h-auto max-sm:max-h-dvh max-sm:rounded-t-xl max-sm:px-safe max-sm:pb-safe'
+          : 'max-sm:px-safe max-sm:pt-safe max-sm:pb-safe',
           !fullScreen && 'sm:h-auto sm:max-h-[calc(100dvh-7vh-1.5rem)] sm:rounded-xl sm:starting:translate-y-1 sm:starting:scale-[0.98]',
           open ? 'duration-150 ease-out' : cx('translate-y-2 opacity-0 duration-[120ms] ease-in', !fullScreen && 'sm:translate-y-1 sm:scale-[0.98]'),
           className,

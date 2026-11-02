@@ -38,7 +38,7 @@ export function Toasts() {
   const list = useSyncExternalStore(subscribe, () => toasts);
   if (list.length === 0) return null;
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-80">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 left-4 z-[60] mr-safe mb-safe ml-safe flex flex-col gap-2 sm:left-auto sm:w-80">
       {list.map((t) => (
         <div key={t.id} className="pointer-events-auto flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-base shadow-popover">
           <span className="min-w-0 flex-1 text-danger">{t.message}</span>

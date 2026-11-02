@@ -542,7 +542,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
 
       {/* Narrow page: a right-hand overlay; on a phone a full-screen modal sheet (like the card dialog). */}
       {!wide && commentsOpen && narrow && (
-        <Dialog open fullScreen onClose={() => setCommentsOpen(false)} labelledBy="doc-comments-title" className="pb-[env(safe-area-inset-bottom)]">
+        <Dialog open fullScreen onClose={() => setCommentsOpen(false)} labelledBy="doc-comments-title">
           <div className="flex h-11 shrink-0 items-center gap-2 pr-2 pl-4">
             <h2 id="doc-comments-title" className="min-w-0 flex-1 truncate text-base font-semibold">
               Comments
