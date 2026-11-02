@@ -54,7 +54,13 @@ export function ColumnsEditor({ project }: { project: Project }) {
         </SortableContext>
       </DndContext>
       <form onSubmit={add} className="mt-2 flex gap-2">
-        <Input aria-label="New column name" placeholder="New column" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
+        <Input
+          aria-label="New column name"
+          placeholder="New column"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="min-w-0 flex-1 md:w-56 md:flex-none"
+        />
         <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!name.trim()}>
           Add column
         </Button>
@@ -92,15 +98,15 @@ function ColumnRow({
         aria-label={`Reorder ${column.name}`}
         {...attributes}
         {...listeners}
-        className="drag-source flex size-6 cursor-grab items-center justify-center rounded text-fg-faint hover:bg-hover hover:text-fg-muted active:cursor-grabbing"
+        className="drag-source tap-target flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-fg-faint hover:bg-hover hover:text-fg-muted active:cursor-grabbing"
       >
         <GripVertical size="0.875rem" />
       </button>
       <div className="min-w-0 flex-1">
         <EditableText label="Column name" value={column.name} allowEmpty={false} onCommit={(n) => onRename(n.trim())} />
       </div>
-      {isDone && <span className="rounded bg-[var(--label-green-bg)] px-1.5 text-xs text-[var(--label-green-fg)]">Done</span>}
-      <span className="w-16 text-right text-sm text-fg-faint tabular-nums">
+      {isDone && <span className="shrink-0 rounded bg-[var(--label-green-bg)] px-1.5 text-xs text-[var(--label-green-fg)]">Done</span>}
+      <span className="w-16 shrink-0 text-right text-sm whitespace-nowrap text-fg-faint tabular-nums">
         {count} card{count === 1 ? '' : 's'}
       </span>
       <span title={blocked ?? undefined}>

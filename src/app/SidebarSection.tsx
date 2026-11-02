@@ -22,7 +22,7 @@ export function SidebarLink({ to, icon, children, className }: { to: string; ico
       to={to}
       className={({ isActive }) =>
         cx(
-          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-base',
+          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-base max-md:h-9',
           isActive ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
           className,
         )

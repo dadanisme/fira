@@ -197,7 +197,7 @@ function TransferSection() {
         <div className="flex gap-2">
           <Select
             aria-label="New owner"
-            className="w-64"
+            className="flex-1 md:w-64 md:flex-none"
             placeholder="Choose a member…"
             value={target}
             onChange={setTarget}

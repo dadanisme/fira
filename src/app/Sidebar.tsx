@@ -136,7 +136,7 @@ function UserMenu() {
     <Popover
       placement="bottom-end"
       trigger={(props) => (
-        <button {...props} type="button" aria-label="Account" className="flex size-7 items-center justify-center rounded-md hover:bg-hover">
+        <button {...props} type="button" aria-label="Account" className="tap-target flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-hover">
           <Avatar actor={{ type: 'user', id: user.uid, name: user.displayName ?? user.email ?? '?' }} />
         </button>
       )}
@@ -172,7 +172,7 @@ function WorkspaceSwitcher() {
           {...props}
           type="button"
           aria-label={`Workspace: ${ws.name}. Switch workspace`}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left hover:bg-hover aria-expanded:bg-hover"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left hover:bg-hover aria-expanded:bg-hover max-md:h-10"
         >
           <WorkspaceIcon id={ws.id} name={ws.name} size={18} />
           <span className="min-w-0 flex-1 truncate text-md font-semibold tracking-tight">{ws.name}</span>

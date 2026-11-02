@@ -28,15 +28,15 @@ export function ProjectSettings({ project }: { project: Project }) {
     <>
       <PageTitle
         title={
-          <span className="flex items-center gap-2">
-            <span className="rounded bg-sunken px-1.5 py-0.5 font-mono text-sm text-fg-muted">{project.key}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 rounded bg-sunken px-1.5 py-0.5 font-mono text-sm text-fg-muted">{project.key}</span>
             {project.name}
           </span>
         }
       >
         <Link
           to={ws(`/p/${project.key}`)}
-          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-base text-fg-muted hover:bg-hover hover:text-fg"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-base whitespace-nowrap text-fg-muted hover:bg-hover hover:text-fg"
         >
           Open board <ArrowUpRight size="0.8125rem" />
         </Link>
@@ -51,13 +51,13 @@ export function ProjectSettings({ project }: { project: Project }) {
                 value={project.name}
                 allowEmpty={false}
                 onCommit={(name) => update({ name: name.trim() })}
-                className="text-right"
+                className="max-md:-ml-2 md:text-right"
               />
             </SettingRow>
           </li>
           <li>
             <SettingRow label="Key" hint="Prefixes card keys; can't change">
-              <span className="px-2 font-mono text-fg-muted">{project.key}</span>
+              <span className="font-mono text-fg-muted md:px-2">{project.key}</span>
             </SettingRow>
           </li>
         </RowList>
@@ -69,7 +69,7 @@ export function ProjectSettings({ project }: { project: Project }) {
             <SettingRow label="Template" hint={templates.length === 0 ? 'Mark a page as template in Docs' : undefined}>
               <Select
                 aria-label="Work page template"
-                className="w-64"
+                className="w-full md:w-64"
                 value={project.pageTemplateId ?? ''}
                 onChange={(id) => update({ pageTemplateId: id || null })}
                 options={[
@@ -84,7 +84,7 @@ export function ProjectSettings({ project }: { project: Project }) {
             <SettingRow label="Parent page">
               <Select
                 aria-label="Work page parent"
-                className="w-64"
+                className="w-full md:w-64"
                 value={project.pageParentId ?? ''}
                 onChange={(id) => update({ pageParentId: id || null })}
                 options={[

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { Building2, KeyRound, Plus, Tag, Users } from 'lucide-react';
 import { useProjects } from '../../data/projects';
 import { useWsPath } from '../../data/workspace';
@@ -17,38 +17,59 @@ import { PageTitle } from './ui';
 export default function SettingsPage() {
   const { data: projects, loading } = useProjects();
   const ws = useWsPath();
+  const strip = useRef<HTMLDivElement>(null);
+  const { pathname } = useLocation();
+
+  // Tab strip (below md): keep the active tab in view, centered when the strip scrolls.
+  useEffect(() => {
+    const el = strip.current;
+    const active = el?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!el || !active || el.scrollWidth <= el.clientWidth) return;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({ left: active.offsetLeft - (el.clientWidth - active.offsetWidth) / 2, behavior: reduce ? 'auto' : 'smooth' });
+  }, [pathname, projects.length]);
+
   return (
-    <div className="flex min-h-0 flex-1">
-      <nav aria-label="Settings" className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-line px-2 py-3">
-        <div>
-          <div className="flex h-7 items-center pr-2 pl-[calc(0.5rem+var(--shell-gutter,0rem))] text-xs font-medium text-fg-faint">Projects</div>
-          {projects.map((p) => (
-            <Item key={p.id} to={`projects/${p.key}`} icon={<span className="font-mono text-2xs font-semibold">{p.key.slice(0, 2)}</span>}>
-              {p.name}
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {/* Below md: a horizontally scrolling tab strip right of the sidebar button; md+: a left column. */}
+      <nav aria-label="Settings" className="flex shrink-0 border-b border-line pl-[calc(var(--shell-gutter,0rem)+0.5rem)] md:w-52 md:flex-col md:border-r md:border-b-0 md:pl-0">
+        <div
+          ref={strip}
+          className={cx(
+            'relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            'md:min-h-0 md:flex-col md:items-stretch md:gap-4 md:overflow-x-hidden md:overflow-y-auto md:py-3',
+          )}
+        >
+          <div className="flex shrink-0 items-center gap-1 md:block">
+            <div className="hidden h-7 items-center pr-2 pl-[calc(0.5rem+var(--shell-gutter,0rem))] text-xs font-medium text-fg-faint md:flex">Projects</div>
+            {projects.map((p) => (
+              <Item key={p.id} to={`projects/${p.key}`} icon={<span className="font-mono text-2xs font-semibold">{p.key.slice(0, 2)}</span>}>
+                {p.name}
+              </Item>
+            ))}
+            <Item to="projects/new" icon={<Plus size="0.875rem" />}>
+              New project
             </Item>
-          ))}
-          <Item to="projects/new" icon={<Plus size="0.875rem" />}>
-            New project
-          </Item>
-        </div>
-        <div>
-          <div className="flex h-7 items-center px-2 text-xs font-medium text-fg-faint">Workspace</div>
-          <Item to="workspace" icon={<Building2 size="0.875rem" />}>
-            General
-          </Item>
-          <Item to="labels" icon={<Tag size="0.875rem" />}>
-            Labels
-          </Item>
-          <Item to="members" icon={<Users size="0.875rem" />}>
-            Members
-          </Item>
-          <Item to="tokens" icon={<KeyRound size="0.875rem" />}>
-            API tokens
-          </Item>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 border-l border-line pl-1 md:block md:border-l-0 md:pl-0">
+            <div className="hidden h-7 items-center px-2 text-xs font-medium text-fg-faint md:flex">Workspace</div>
+            <Item to="workspace" icon={<Building2 size="0.875rem" />}>
+              General
+            </Item>
+            <Item to="labels" icon={<Tag size="0.875rem" />}>
+              Labels
+            </Item>
+            <Item to="members" icon={<Users size="0.875rem" />}>
+              Members
+            </Item>
+            <Item to="tokens" icon={<KeyRound size="0.875rem" />}>
+              API tokens
+            </Item>
+          </div>
         </div>
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-6 py-6">
+        <div className="mx-auto max-w-2xl px-4 py-5 md:px-6 md:py-6">
           <Routes>
             <Route
               index
@@ -77,13 +98,13 @@ function Item({ to, icon, children }: { to: string; icon: ReactNode; children: R
       end
       className={({ isActive }) =>
         cx(
-          'flex h-7 min-w-0 items-center gap-2 rounded-md px-2 text-base',
+          'flex h-9 shrink-0 items-center gap-2 rounded-md px-2.5 text-base whitespace-nowrap md:h-7 md:min-w-0 md:shrink md:px-2',
           isActive ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
         )
       }
     >
       <span className="flex w-4 shrink-0 justify-center text-fg-faint">{icon}</span>
-      <span className="truncate">{children}</span>
+      <span className="max-w-40 truncate md:max-w-none">{children}</span>
     </NavLink>
   );
 }

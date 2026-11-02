@@ -163,7 +163,7 @@ function CreateForm({ onCreated }: { onCreated: (c: { token: ApiToken; secret: s
             maxLength={40}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-64"
+            className="min-w-0 flex-1 md:w-64 md:flex-none"
           />
           <Button type="submit" variant="primary" icon={<Plus size="0.8125rem" />} disabled={!trimmed || busy}>
             {busy ? 'Creating…' : 'Create token'}
@@ -190,13 +190,18 @@ function SecretNotice({ created, onDone }: { created: { token: ApiToken; secret:
     <div role="status" className="mb-8 rounded-lg border border-accent/40 bg-accent-soft p-3">
       <p className="text-base font-medium">Token “{created.token.name}” created</p>
       <p className="mb-2 text-sm text-fg-muted">Copy the secret now. It won't be shown again.</p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        {/* Below md the secret wraps (an input can't); md+ keeps the one-line field. */}
+        <code className="w-full rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-sm break-all text-fg select-all md:hidden"
+        >
+          {created.secret}
+        </code>
         <input
           readOnly
           aria-label="Token secret"
           value={created.secret}
           onFocus={(e) => e.target.select()}
-          className="h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 font-mono text-sm text-fg outline-none focus:border-accent"
+          className="hidden h-7 min-w-0 flex-1 rounded-md border border-line bg-surface px-2 font-mono text-sm text-fg outline-none focus:border-accent md:block"
         />
         <Button icon={copied ? <Check size="0.8125rem" /> : <Copy size="0.8125rem" />} onClick={copy}>
           {copied ? 'Copied' : 'Copy'}
@@ -217,12 +222,12 @@ function creatorOf(t: ApiToken, members: readonly Member[]): { name: string; rem
 
 function TokenRow({ token: t, creator, onRevoke }: { token: ApiToken; creator?: { name: string; removed: boolean }; onRevoke?: () => void }) {
   return (
-    <li className={cx('flex h-11 items-center gap-2.5 px-3', t.revoked && 'opacity-60')}>
+    <li className={cx('flex min-h-11 items-center gap-2.5 px-3 py-1.5', t.revoked && 'opacity-60')}>
       <Avatar actor={{ type: 'token', id: t.id, name: t.name }} size={20} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium">{t.name}</span>
-          <code className="flex items-center gap-1 text-xs text-fg-faint">
+          <code className="flex shrink-0 items-center gap-1 text-xs text-fg-faint">
             <KeyRound size="0.625rem" />
             {t.prefix}…
           </code>

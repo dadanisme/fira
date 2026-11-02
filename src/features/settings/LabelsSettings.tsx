@@ -48,8 +48,14 @@ export function LabelsSettings() {
         </p>
       )}
       <form onSubmit={add} className="mt-3 flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input aria-label="New label name" placeholder="New label" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            aria-label="New label name"
+            placeholder="New label"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="min-w-32 flex-1 md:w-56 md:flex-none"
+          />
           <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!trimmed || Boolean(clash)}>
             Add label
           </Button>
@@ -71,7 +77,7 @@ function LabelRow({ label, labels }: { label: Label; labels: readonly Label[] })
             {...p}
             type="button"
             aria-label={`Color of ${label.name}: ${label.color}`}
-            className="flex size-6 items-center justify-center rounded-md hover:bg-hover"
+            className="tap-target flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-hover"
           >
             <span className="size-3 rounded-full" style={{ background: `var(--label-${label.color}-fg)` }} />
           </button>
@@ -91,7 +97,9 @@ function LabelRow({ label, labels }: { label: Label; labels: readonly Label[] })
       <div className="min-w-0 flex-1">
         <EditableText label="Label name" value={label.name} allowEmpty={false} onCommit={(n) => run(() => renameLabel(labels, label, n))} />
       </div>
-      <Badge color={label.color}>{label.name}</Badge>
+      <Badge color={label.color} className="max-w-[40%] min-w-0">
+        {label.name}
+      </Badge>
       <IconButton
         label={`Delete ${label.name}`}
         className="hover:text-danger"

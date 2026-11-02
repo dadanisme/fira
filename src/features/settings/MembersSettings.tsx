@@ -151,7 +151,7 @@ function InviteForm({ members, invites, seats }: { members: Member[]; invites: I
               setError(null);
             }}
             disabled={full}
-            className="min-w-48 flex-1"
+            className="w-full md:w-auto md:min-w-48 md:flex-1"
           />
           <Select
             aria-label="Role"
@@ -159,7 +159,7 @@ function InviteForm({ members, invites, seats }: { members: Member[]; invites: I
             onChange={setRole}
             options={INVITE_ROLES.map((r) => ({ value: r, label: ROLE_NAMES[r] }))}
             disabled={full}
-            className="w-28"
+            className="flex-1 md:w-28 md:flex-none"
           />
           <Button type="submit" variant="primary" icon={<UserPlus size="0.8125rem" />} disabled={!normalized || Boolean(problem) || busy || full}>
             {busy ? 'Inviting…' : 'Invite'}
@@ -205,7 +205,7 @@ function InviteOutcome({ outcome, onDismiss }: { outcome: Outcome; onDismiss: ()
           <>Invite sent to {outcome.email}.</>
         )}
       </p>
-      <button type="button" aria-label="Dismiss" onClick={onDismiss} className="rounded opacity-70 hover:opacity-100">
+      <button type="button" aria-label="Dismiss" onClick={onDismiss} className="tap-target rounded opacity-70 hover:opacity-100">
         <X size="0.8125rem" />
       </button>
     </div>
@@ -258,7 +258,7 @@ function MemberRow({ member: m }: { member: Member }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate font-medium">{name}</span>
-          {self && <span className="text-sm text-fg-faint">(you)</span>}
+          {self && <span className="shrink-0 text-sm text-fg-faint">(you)</span>}
         </div>
         <div className="truncate text-xs text-fg-faint">
           {m.name && `${m.email} · `}
@@ -293,7 +293,7 @@ function MemberRow({ member: m }: { member: Member }) {
           </Menu>
         </Popover>
       ) : (
-        <Badge color={role === 'owner' ? 'blue' : 'gray'}>{ROLE_NAMES[role]}</Badge>
+        <Badge color={role === 'owner' ? 'blue' : 'gray'} className="shrink-0">{ROLE_NAMES[role]}</Badge>
       )}
     </li>
   );
@@ -342,14 +342,14 @@ function InviteRow({ invite: i }: { invite: Invite }) {
     });
 
   return (
-    <li className="flex min-h-11 items-center gap-2.5 px-3 py-1.5">
+    <li className="flex min-h-11 flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-1.5">
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-faint">
         <Mail size="0.625rem" />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-48">
         <div className="flex items-center gap-1.5">
           <span className="truncate font-medium">{i.email}</span>
-          <Badge>{ROLE_NAMES[i.role]}</Badge>
+          <Badge className="shrink-0">{ROLE_NAMES[i.role]}</Badge>
         </div>
         <div className="flex min-w-0 items-center gap-1 text-xs text-fg-faint">
           <span className="truncate">
@@ -370,7 +370,7 @@ function InviteRow({ invite: i }: { invite: Invite }) {
         </div>
       </div>
       {admin && (
-        <>
+        <div className="ml-auto flex shrink-0 gap-1">
           <Button
             size="sm"
             variant="ghost"
@@ -384,7 +384,7 @@ function InviteRow({ invite: i }: { invite: Invite }) {
           <Button size="sm" variant="ghost" className="hover:text-danger" onClick={revoke}>
             Revoke
           </Button>
-        </>
+        </div>
       )}
     </li>
   );

@@ -62,11 +62,12 @@ export function FieldsEditor({ project }: { project: Project }) {
         <RowList>
           {fields.map((f, i) => (
             <li key={f.id} className="flex flex-col gap-1 px-1.5 py-1.5">
-              <div className="flex items-center gap-1">
-                <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1">
+                {/* Below md the name takes its own line and the key + controls go under it. */}
+                <div className="min-w-0 flex-1 max-md:basis-full">
                   <EditableText label="Field name" value={f.name} allowEmpty={false} onCommit={(n) => patch(f.id, { name: n.trim() })} />
                 </div>
-                <code className="shrink-0 px-1 text-xs text-fg-faint" title="API key">
+                <code className="min-w-0 shrink truncate px-1 text-xs text-fg-faint max-md:mr-auto max-md:pl-2" title="API key">
                   {f.key}
                 </code>
                 <Select
@@ -110,9 +111,15 @@ export function FieldsEditor({ project }: { project: Project }) {
       ) : (
         <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-sm text-fg-faint">No custom fields yet</p>
       )}
-      <form onSubmit={add} className="mt-2 flex gap-2">
-        <Input aria-label="New field name" placeholder="New field" value={name} onChange={(e) => setName(e.target.value)} className="w-56" />
-        <Select aria-label="New field type" className="w-32" value={type} options={TYPE_OPTIONS} onChange={setType} />
+      <form onSubmit={add} className="mt-2 flex flex-wrap gap-2">
+        <Input
+          aria-label="New field name"
+          placeholder="New field"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="min-w-0 flex-1 max-md:basis-full md:w-56 md:flex-none"
+        />
+        <Select aria-label="New field type" className="flex-1 md:w-32 md:flex-none" value={type} options={TYPE_OPTIONS} onChange={setType} />
         <Button type="submit" icon={<Plus size="0.8125rem" />} disabled={!name.trim()}>
           Add field
         </Button>

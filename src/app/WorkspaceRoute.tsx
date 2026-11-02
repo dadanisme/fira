@@ -93,7 +93,7 @@ function useActiveWorkspace(m: Membership | undefined): ActiveWorkspace | null {
 function WorkspaceNotFound({ slug }: { slug: string }) {
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="w-80 space-y-3 text-center">
+      <div className="w-full max-w-80 space-y-3 text-center">
         <h1 className="text-lg font-semibold">Workspace not found</h1>
         <p className="text-fg-muted">
           There is no workspace <span className="font-mono">{slug}</span>, or you aren't a member of it.

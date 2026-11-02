@@ -118,9 +118,9 @@ function WorkspaceList({ memberships }: { memberships: Membership[] }) {
               <span className="block truncate font-medium">{m.workspaceName}</span>
               <span className="block truncate font-mono text-xs text-fg-faint">/w/{m.workspaceSlug}</span>
             </span>
-            {m.workspaceId === last && <span className="text-xs text-fg-faint">Last used</span>}
+            {m.workspaceId === last && <span className="shrink-0 text-xs whitespace-nowrap text-fg-faint">Last used</span>}
             {m.role !== 'member' && <Badge color={m.role === 'owner' ? 'blue' : 'gray'}>{ROLE_NAMES[m.role]}</Badge>}
-            <ChevronRight size="0.875rem" className="text-fg-faint group-hover:text-fg-muted" />
+            <ChevronRight size="0.875rem" className="shrink-0 text-fg-faint group-hover:text-fg-muted" />
           </Link>
         </li>
       ))}
@@ -148,9 +148,10 @@ function InviteRow({ invite, onAccepted }: { invite: Invite; onAccepted: (ws: { 
 
   return (
     <li className="flex flex-col gap-1.5 px-3 py-2.5">
-      <div className="flex items-center gap-3">
+      {/* Narrow screens: Decline / Accept wrap under the text, right-aligned. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <WorkspaceIcon id={invite.workspaceId} name={invite.workspaceName} size={24} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-40">
           <div className="truncate font-medium">{invite.workspaceName}</div>
           <div className="flex min-w-0 items-center gap-1 text-xs text-fg-faint">
             <Avatar actor={{ type: 'user', id: invite.invitedBy.uid, name: invite.invitedBy.name }} size={14} />
@@ -159,12 +160,14 @@ function InviteRow({ invite, onAccepted }: { invite: Invite; onAccepted: (ws: { 
             </span>
           </div>
         </div>
-        <Button variant="ghost" disabled={busy !== null} onClick={() => act('decline')}>
-          {busy === 'decline' ? 'Declining…' : 'Decline'}
-        </Button>
-        <Button variant="primary" disabled={busy !== null} onClick={() => act('accept')}>
-          {busy === 'accept' ? 'Joining…' : 'Accept'}
-        </Button>
+        <div className="ml-auto flex shrink-0 gap-2">
+          <Button variant="ghost" disabled={busy !== null} onClick={() => act('decline')}>
+            {busy === 'decline' ? 'Declining…' : 'Decline'}
+          </Button>
+          <Button variant="primary" disabled={busy !== null} onClick={() => act('accept')}>
+            {busy === 'accept' ? 'Joining…' : 'Accept'}
+          </Button>
+        </div>
       </div>
       {error && (
         <p role="alert" className="pl-9 text-sm text-danger">
