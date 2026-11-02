@@ -36,7 +36,8 @@ function decorate(doc: PMNode): DecorationSet {
 /**
  * Card keys in text (`NI-12`) render as chips linking to the card. Purely a
  * decoration: the stored Markdown stays plain text. Mod-click opens the card
- * (plain clicks place the caret, so the key stays editable).
+ * (plain clicks place the caret, so the key stays editable). On touch a tap places
+ * the caret and the link bubble offers "Open" (linkTaps.ts, which runs first).
  */
 export const CardMentions = Extension.create<CardMentionsOptions>({
   name: 'cardMentions',

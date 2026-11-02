@@ -119,9 +119,12 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
     }
     try {
       const c = editor.view.coordsAtPos(slash.from);
-      const h = panel.current.offsetHeight;
-      const below = c.bottom + 4 + h <= innerHeight - 8;
-      setPos({ top: below ? c.bottom + 4 : Math.max(8, c.top - 4 - h), left: Math.min(c.left, innerWidth - 248) });
+      const { offsetHeight: h, offsetWidth: w } = panel.current;
+      // The visual viewport excludes the on-screen keyboard (iOS keeps innerHeight unchanged).
+      const vv = window.visualViewport;
+      const bottom = vv ? vv.offsetTop + vv.height : innerHeight;
+      const below = c.bottom + 4 + h <= bottom - 8;
+      setPos({ top: below ? c.bottom + 4 : Math.max(8, c.top - 4 - h), left: Math.max(8, Math.min(c.left, innerWidth - w - 8)) });
     } catch {
       setPos(null);
     }
@@ -137,7 +140,7 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
       ref={panel}
       role="listbox"
       onMouseDown={(e) => e.preventDefault()}
-      className="fixed z-50 flex max-h-72 w-60 flex-col overflow-y-auto rounded-lg bg-surface p-1 text-fg shadow-popover"
+      className="fixed z-50 flex max-h-72 w-60 max-w-[calc(100vw-1rem)] flex-col overflow-y-auto rounded-lg bg-surface p-1 text-fg shadow-popover touch:max-h-56"
       style={pos ?? { top: 0, left: 0, opacity: 0 }}
     >
       <div className="px-2 pt-1 pb-1 text-xs font-medium text-fg-faint">Blocks</div>
@@ -150,7 +153,7 @@ export function SlashMenu({ editor, keyHandler, pickImage }: SlashMenuProps) {
           data-selected={i === index}
           onMouseEnter={() => setIndex(i)}
           onClick={() => choose(item)}
-          className={cx('flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2 text-left text-base', i === index && 'bg-hover')}
+          className={cx('flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2 text-left text-base touch:h-10', i === index && 'bg-hover')}
         >
           <span className="flex size-6 items-center justify-center rounded border border-line bg-surface text-fg-muted">{item.icon}</span>
           {item.title}

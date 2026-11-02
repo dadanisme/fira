@@ -15,6 +15,7 @@ import {
   Copy,
   FilePlus2,
   FileText,
+  FolderInput,
   LayoutTemplate,
   MoreHorizontal,
   Pencil,
@@ -33,7 +34,8 @@ import { preloadMarkdownEditor } from '../../components/MarkdownEditor';
 import { cx } from '../../lib/cx';
 import { useDndSensors } from '../../lib/dndSensors';
 import { remPx } from '../../lib/rem';
-import { addPage, addPageFromTemplate, duplicate, pageTitle, renamePage } from './actions';
+import { addPage, addPageFromTemplate, duplicate, movePage, pageTitle, renamePage } from './actions';
+import { MovePageDialog } from './MovePageDialog';
 import { ancestors, childrenMap, dropRank, flatten, project, type FlatItem, type Projection } from './tree';
 
 // Rendered (lazily) in the sidebar below the projects. Keep Tiptap out of this module's imports.
@@ -228,7 +230,7 @@ function PageTree({ pages, templates, empty }: { pages: Page[]; templates: boole
       </SortableContext>
       <DragOverlay dropAnimation={null}>
         {dragged && (
-          <div className="flex h-7 items-center gap-2 rounded-md bg-surface px-2 text-base shadow-popover">
+          <div className="flex h-7 items-center gap-2 rounded-md bg-surface px-2 text-base shadow-popover max-md:h-9">
             <PageIcon page={dragged.page} />
             <span className="truncate">{pageTitle(dragged.page)}</span>
           </div>
@@ -250,11 +252,18 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  /** "Move to…" dialog: mounted while open and during its exit animation. */
+  const [moveDialog, setMoveDialog] = useState<'open' | 'closing' | null>(null);
 
   const onContextMenu = useCallback((e: ReactMouseEvent) => {
     e.preventDefault();
     setMenuOpen(true);
   }, []);
+
+  const moveTo = (parentId: string | null) => {
+    if (parentId) setExpanded(parentId, true);
+    movePage(page, pages, parentId);
+  };
 
   const addChild = () => {
     setExpanded(page.id, true);
@@ -262,107 +271,123 @@ function TreeRow({ item, pages, depth, expanded, active }: { item: FlatItem; pag
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cx('group/row drag-source relative', isDragging && 'opacity-40')}
-      onContextMenu={onContextMenu}
-      onPointerEnter={preloadMarkdownEditor}
-      {...attributes}
-      {...listeners}
-    >
+    <>
       <div
-        className={cx(
-          'flex h-7 min-w-0 items-center gap-1 rounded-md pr-1 text-base',
-          active ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
-        )}
-        style={{ paddingLeft: `${0.25 + depth * INDENT}rem` }}
+        ref={setNodeRef}
+        style={{ transform: CSS.Translate.toString(transform), transition }}
+        className={cx('group/row drag-source relative', isDragging && 'opacity-40')}
+        onContextMenu={onContextMenu}
+        onPointerEnter={preloadMarkdownEditor}
+        {...attributes}
+        {...listeners}
       >
-        <button
-          type="button"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-          onClick={() => setExpanded(page.id, !expanded)}
-          onPointerDown={(e) => e.stopPropagation()}
+        <div
           className={cx(
-            'flex size-5 shrink-0 items-center justify-center rounded text-fg-faint hover:bg-active hover:text-fg',
-            !item.hasChildren && 'invisible',
+            'flex h-7 min-w-0 items-center gap-1 rounded-md pr-1 text-base max-md:h-9',
+            active ? 'bg-active font-medium text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
           )}
+          style={{ paddingLeft: `${0.25 + depth * INDENT}rem` }}
         >
-          <ChevronRight size="0.8125rem" className={cx('transition-transform', expanded && 'rotate-90')} />
-        </button>
-        {item.hasChildren ? (
           <button
             type="button"
-            tabIndex={-1}
-            aria-hidden
+            aria-label={expanded ? 'Collapse' : 'Expand'}
             onClick={() => setExpanded(page.id, !expanded)}
             onPointerDown={(e) => e.stopPropagation()}
-            className="flex w-4 shrink-0 justify-center"
-          >
-            <PageIcon page={page} />
-          </button>
-        ) : (
-          <Link to={ws(`/d/${page.id}`)} draggable={false} tabIndex={-1} className="flex w-4 shrink-0 justify-center">
-            <PageIcon page={page} />
-          </Link>
-        )}
-        {renaming ? (
-          <RenameInput page={page} onDone={() => setRenaming(false)} />
-        ) : (
-          <Link to={ws(`/d/${page.id}`)} draggable={false} className="min-w-0 flex-1 truncate py-1 pl-1">
-            {pageTitle(page)}
-          </Link>
-        )}
-        <div className={cx('flex items-center', !menuOpen && 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 touch:opacity-60')}>
-          <Popover
-            open={menuOpen}
-            onOpenChange={setMenuOpen}
-            trigger={(props) => (
-              <IconButton {...props} size="sm" label="Page actions" onPointerDown={(e) => e.stopPropagation()}>
-                <MoreHorizontal size="0.875rem" />
-              </IconButton>
+            className={cx(
+              'flex size-5 shrink-0 items-center justify-center rounded text-fg-faint hover:bg-active hover:text-fg max-md:size-7',
+              !item.hasChildren && 'invisible',
             )}
           >
-            <Menu>
-              <MenuItem icon={<Pencil size="0.875rem" />} onSelect={() => setRenaming(true)}>
-                Rename
-              </MenuItem>
-              <MenuItem icon={<Plus size="0.875rem" />} onSelect={addChild}>
-                Add subpage
-              </MenuItem>
-              {page.isTemplate && (
-                <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => navigate(ws(`/d/${addPageFromTemplate(pages, page, null)}`))}>
-                  New page from template
-                </MenuItem>
+            <ChevronRight size="0.8125rem" className={cx('transition-transform', expanded && 'rotate-90')} />
+          </button>
+          {item.hasChildren ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              onClick={() => setExpanded(page.id, !expanded)}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex w-4 shrink-0 justify-center"
+            >
+              <PageIcon page={page} />
+            </button>
+          ) : (
+            <Link to={ws(`/d/${page.id}`)} draggable={false} tabIndex={-1} className="flex w-4 shrink-0 justify-center">
+              <PageIcon page={page} />
+            </Link>
+          )}
+          {renaming ? (
+            <RenameInput page={page} onDone={() => setRenaming(false)} />
+          ) : (
+            <Link to={ws(`/d/${page.id}`)} draggable={false} className="min-w-0 flex-1 truncate py-1 pl-1">
+              {pageTitle(page)}
+            </Link>
+          )}
+          <div className={cx('flex items-center', !menuOpen && 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 touch:opacity-60')}>
+            <Popover
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+              trigger={(props) => (
+                <IconButton {...props} size="sm" label="Page actions" onPointerDown={(e) => e.stopPropagation()}>
+                  <MoreHorizontal size="0.875rem" />
+                </IconButton>
               )}
-              <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(ws(`/d/${duplicate(pages, page)}`))}>
-                Duplicate
-              </MenuItem>
-              <MenuItem
-                icon={page.isTemplate ? <FileText size="0.875rem" /> : <LayoutTemplate size="0.875rem" />}
-                onSelect={() => updatePageMeta(page.id, { isTemplate: !page.isTemplate }).catch(reportError)}
-              >
-                {page.isTemplate ? 'Convert to page' : 'Convert to template'}
-              </MenuItem>
-              <MenuSeparator />
-              <MenuItem
-                danger
-                icon={<Trash2 size="0.875rem" />}
-                onSelect={() => {
-                  trashPage(page, pages).catch(reportError);
-                  if (active) navigate(ws('/trash'));
-                }}
-              >
-                Move to trash
-              </MenuItem>
-            </Menu>
-          </Popover>
-          <IconButton size="sm" label="Add subpage" onClick={addChild} onPointerDown={(e) => e.stopPropagation()}>
-            <Plus size="0.875rem" />
-          </IconButton>
+            >
+              <Menu>
+                <MenuItem icon={<Pencil size="0.875rem" />} onSelect={() => setRenaming(true)}>
+                  Rename
+                </MenuItem>
+                <MenuItem icon={<Plus size="0.875rem" />} onSelect={addChild}>
+                  Add subpage
+                </MenuItem>
+                {page.isTemplate && (
+                  <MenuItem icon={<FilePlus2 size="0.875rem" />} onSelect={() => navigate(ws(`/d/${addPageFromTemplate(pages, page, null)}`))}>
+                    New page from template
+                  </MenuItem>
+                )}
+                <MenuItem icon={<FolderInput size="0.875rem" />} onSelect={() => setMoveDialog('open')}>
+                  Move to…
+                </MenuItem>
+                <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(ws(`/d/${duplicate(pages, page)}`))}>
+                  Duplicate
+                </MenuItem>
+                <MenuItem
+                  icon={page.isTemplate ? <FileText size="0.875rem" /> : <LayoutTemplate size="0.875rem" />}
+                  onSelect={() => updatePageMeta(page.id, { isTemplate: !page.isTemplate }).catch(reportError)}
+                >
+                  {page.isTemplate ? 'Convert to page' : 'Convert to template'}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  danger
+                  icon={<Trash2 size="0.875rem" />}
+                  onSelect={() => {
+                    trashPage(page, pages).catch(reportError);
+                    if (active) navigate(ws('/trash'));
+                  }}
+                >
+                  Move to trash
+                </MenuItem>
+              </Menu>
+            </Popover>
+            <IconButton size="sm" label="Add subpage" onClick={addChild} onPointerDown={(e) => e.stopPropagation()}>
+              <Plus size="0.875rem" />
+            </IconButton>
+          </div>
         </div>
       </div>
-    </div>
+      {/* Outside the row: React events bubble through portals, and the row is draggable. */}
+      {moveDialog && (
+        <MovePageDialog
+          page={page}
+          pages={pages}
+          open={moveDialog === 'open'}
+          onClose={() => setMoveDialog('closing')}
+          onExited={() => setMoveDialog(null)}
+          onMove={moveTo}
+        />
+      )}
+    </>
   );
 }
 

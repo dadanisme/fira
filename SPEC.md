@@ -124,7 +124,8 @@ Everything but tokens and slug reservations lives under its workspace: `W = work
 
 ## Docs (SPA)
 
-- One nested page tree per workspace in the sidebar (expand/collapse, remembered per workspace on this device in `localStorage` `fira:docs-expanded:<workspaceId>`; drag to reorder/reparent, "+" to add child; renaming goes through the conditional save, on top of any newer version). Templates are pages with `isTemplate` shown in a separate "Templates" section.
+- One nested page tree per workspace in the sidebar (expand/collapse, remembered per workspace on this device in `localStorage` `fira:docs-expanded:<workspaceId>`; drag to reorder/reparent (on touch: long-press, then drag), "+" to add child; renaming goes through the conditional save, on top of any newer version). Templates are pages with `isTemplate` shown in a separate "Templates" section.
+- Row menu "Move to…" (also on touch, where dragging is awkward): a searchable dialog (full screen on phones) listing "Top level" and the pages of the same section in tree order, minus the page itself and its descendants; the current parent is marked and can't be picked. The page goes last among the new parent's children (the same `parentId` + `rank` write as a drag-reparent), and the new parent is expanded.
 - Page view: title (click to edit), Tiptap editor (click to edit; `/` slash menu; markdown shortcuts; headings, lists, task lists, code blocks, quotes, links, tables, images via Storage upload), autosave (debounced; the editor never waits on it) that never silently overwrites anyone:
   - Every content/title save is conditional on the version the edit is based on (a Firestore transaction: read version, compare, write `version + 1` + snapshot per the session rule). A save based on a stale version is rejected, whether the newer version came from another person, another tab or an API token. Same title+content as the server = no-op.
   - Remote change and no unsaved local edits: loaded into the editor silently (only the differing blocks/characters are replaced, so the caret, scroll and comment highlights stay; not part of undo).
@@ -133,12 +134,13 @@ Everything but tokens and slug reservations lives under its workspace: `W = work
 - Presence: avatars of the other people on the page (header, max 4 + "+N"); someone who typed in the last 20 s (or holds unsaved edits) gets an accent ring + dot and the tooltip "<name> is editing" (else "is viewing"). You aren't shown.
 - Header also has a "Show/Hide resolved comments (N)" toggle (only when resolved threads exist), next to version history.
 - Card mentions: typing a card key (`NI-12`) renders as a chip linking to the card in the current workspace.
-- Links: in-app links (root-relative paths or absolute URLs on the app's origin) open in place; workspace-relative ones (`/d/<pageId>`, `/p/NI/NI-12`, `/trash`, `/settings/...`) resolve within the current workspace, `/w/<slug>/...` stays as written. Resolution is render/click time only; the Markdown keeps its href. In the editor a click follows an in-app link, ⌘/Ctrl-click opens it in a new tab, Alt/Option-click edits; other links open in a new tab.
+- Links: in-app links (root-relative paths or absolute URLs on the app's origin) open in place; workspace-relative ones (`/d/<pageId>`, `/p/NI/NI-12`, `/trash`, `/settings/...`) resolve within the current workspace, `/w/<slug>/...` stays as written. Resolution is render/click time only; the Markdown keeps its href. In the editor a click follows an in-app link, ⌘/Ctrl-click opens it in a new tab, Alt/Option-click edits; other links open in a new tab. On touch devices (a finger tap) a tap on a link or card chip places the caret and shows a bubble below it: **Open** / **Edit** (the URL) / **Remove** for links, **Open <key>** for card chips; the bubble is editor UI only (never changes the Markdown or saves). The selection bubble (format, link, comment) sits below the selection on touch, clear of the native callout.
 - Image uploads over 10 MB are rejected before uploading, with a message naming the file.
 - Inline comments: select text → "Comment" → thread in a right margin panel; reply; resolve; show resolved toggle.
 - Version history drawer: list versions, preview, restore (restore = new version, saved on top of whatever is current, snapshotting it first if needed).
 - Trash: trashing a page trashes its subtree; restore; delete forever.
 - "Create page from template".
+- Phones (below `md`, 768px): breadcrumbs show only the parent (ancestors above it behind "…"), presence shows 2 faces + "+N", version history and the resolved-comments toggle move into the "More" menu; comments and version history open as full-screen sheets with a close button (history: list, then the picked version's preview with a back button); the table of contents stays a popover. Wide tables and code blocks scroll inside their own box, never the page.
 
 ## REST API (`/api/v1`)
 

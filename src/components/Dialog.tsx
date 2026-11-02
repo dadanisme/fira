@@ -12,6 +12,8 @@ export interface DialogProps {
   labelledBy: string;
   /** Where focus goes on close; defaults to the element focused when the dialog opened. */
   returnFocus?(): HTMLElement | null | undefined;
+  /** Full-screen at every width (a sheet), not only below `sm`. */
+  fullScreen?: boolean;
   className?: string;
   ref?: Ref<HTMLDivElement>;
   children: ReactNode;
@@ -36,7 +38,7 @@ function isTextEntry(el: EventTarget | null): el is HTMLElement {
  * left (focus moves to the dialog) and a second Escape closes. Popovers opened from
  * inside portal in after the dialog, so they stack above it and may take focus.
  */
-export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, className, ref, children }: DialogProps) {
+export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, fullScreen, className, ref, children }: DialogProps) {
   const root = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const latest = useRef({ onClose, onExited, returnFocus });
@@ -114,7 +116,7 @@ export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, class
   }, [open]);
 
   return createPortal(
-    <div ref={root} inert={!open} className="fixed inset-0 z-40 flex justify-center sm:items-start sm:p-6 sm:pt-[7vh]">
+    <div ref={root} inert={!open} className={cx('fixed inset-0 z-40 flex justify-center', !fullScreen && 'sm:items-start sm:p-6 sm:pt-[7vh]')}>
       <div
         aria-hidden
         // A click fires here only if it also started here (not a drag out of the dialog).
@@ -136,10 +138,9 @@ export function Dialog({ open, onClose, onExited, labelledBy, returnFocus, class
         tabIndex={-1}
         className={cx(
           'relative flex h-dvh w-full flex-col bg-bg shadow-popover outline-none',
-          'sm:h-auto sm:max-h-[calc(100dvh-7vh-1.5rem)] sm:rounded-xl',
-          'transition-[opacity,translate,scale] motion-reduce:transition-none',
-          'starting:translate-y-2 starting:opacity-0 sm:starting:translate-y-1 sm:starting:scale-[0.98]',
-          open ? 'duration-150 ease-out' : 'translate-y-2 opacity-0 duration-[120ms] ease-in sm:translate-y-1 sm:scale-[0.98]',
+          'transition-[opacity,translate,scale] motion-reduce:transition-none starting:translate-y-2 starting:opacity-0',
+          !fullScreen && 'sm:h-auto sm:max-h-[calc(100dvh-7vh-1.5rem)] sm:rounded-xl sm:starting:translate-y-1 sm:starting:scale-[0.98]',
+          open ? 'duration-150 ease-out' : cx('translate-y-2 opacity-0 duration-[120ms] ease-in', !fullScreen && 'sm:translate-y-1 sm:scale-[0.98]'),
           className,
         )}
       >

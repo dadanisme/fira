@@ -14,6 +14,7 @@ import {
   SquareKanban,
   TableOfContents,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { Page } from '@shared/types';
 import { byRank } from '@shared/rank';
@@ -32,6 +33,7 @@ import { useWorkspaceId, useWsPath } from '../../data/workspace';
 import { useThreads } from '../../data/threads';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { Dialog } from '../../components/Dialog';
 import { IconButton } from '../../components/IconButton';
 import {
   MarkdownEditor,
@@ -45,6 +47,7 @@ import { Popover } from '../../components/Popover';
 import { useUser } from '../../lib/auth';
 import { cx } from '../../lib/cx';
 import { remPx } from '../../lib/rem';
+import { NARROW, useMediaQuery } from '../../lib/useMediaQuery';
 import { duplicate, pageTitle } from './actions';
 import { CommentsPanel, type PendingAnchor } from './CommentsPanel';
 import { ConfirmButton } from './ConfirmButton';
@@ -118,6 +121,8 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const root = useRef<HTMLDivElement>(null);
   const widthStep = useWidthStep(root);
   const wide = widthStep >= WIDE_REM;
+  /** Phone layout (below md): collapsed breadcrumbs, fewer header buttons, full-screen comments. */
+  const narrow = useMediaQuery(NARROW);
 
   // ------------------------------------------------ comments
   const { data: threads } = useThreads(page.id);
@@ -224,6 +229,9 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const { data: card } = useLinkedCard(page.cardId);
   const crumbs = useMemo(() => ancestors(pages, page.id).reverse(), [pages, page.id]);
+  // On a phone only the parent shows; the ones above it go behind "…".
+  const shownCrumbs = narrow ? crumbs.slice(-1) : crumbs;
+  const hiddenCrumbs = narrow ? crumbs.slice(0, -1) : [];
   const templates = useMemo(() => pages.filter((p) => p.isTemplate && !p.trashed && p.id !== page.id).sort(byRank), [pages, page.id]);
   const uploadImage = useCallback((file: File) => uploadPageImage(page.id, file), [page.id]);
   const setIcon = (icon: string | null) => updatePageMeta(page.id, { icon }).catch(reportError);
@@ -237,12 +245,32 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   return (
     <div ref={root} className="flex h-full min-h-0 flex-col">
       {/* Top bar */}
-      <header className="flex h-11 shrink-0 items-center gap-2 pr-3 pl-[calc(0.75rem+var(--shell-gutter,0rem))]">
+      <header className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-[calc(0.75rem+var(--shell-gutter,0rem))] md:gap-2 md:pr-3">
         <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-base text-fg-muted">
           {page.isTemplate && <LayoutTemplate size="0.8125rem" className="mr-1 shrink-0 text-fg-faint" />}
-          {crumbs.map((c) => (
+          {hiddenCrumbs.length > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5">
+              <Popover
+                trigger={(props) => (
+                  <IconButton {...props} size="sm" label="Parent pages">
+                    <MoreHorizontal size="0.875rem" />
+                  </IconButton>
+                )}
+              >
+                <Menu>
+                  {hiddenCrumbs.map((c) => (
+                    <MenuItem key={c.id} icon={c.icon ?? <FileText size="0.875rem" />} onSelect={() => navigate(ws(`/d/${c.id}`))}>
+                      {pageTitle(c)}
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </Popover>
+              <ChevronRight size="0.75rem" className="shrink-0 text-fg-faint" />
+            </span>
+          )}
+          {shownCrumbs.map((c) => (
             <span key={c.id} className="flex min-w-0 items-center gap-0.5">
-              <Link to={ws(`/d/${c.id}`)} className="max-w-40 truncate rounded px-1 py-0.5 hover:bg-hover hover:text-fg">
+              <Link to={ws(`/d/${c.id}`)} className="max-w-24 truncate rounded px-1 py-0.5 hover:bg-hover hover:text-fg md:max-w-40">
                 {c.icon && <span className="mr-1">{c.icon}</span>}
                 {pageTitle(c)}
               </Link>
@@ -257,16 +285,16 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             <Link
               to={ws(`/p/${card.key.split('-')[0]}/${card.key}`)}
               title={card.title}
-              className="ml-2 inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-xs font-medium"
+              className="ml-1 inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 text-xs font-medium md:ml-2"
               style={{ background: 'var(--label-blue-bg)', color: 'var(--label-blue-fg)' }}
             >
               <SquareKanban size="0.75rem" className="shrink-0" />
-              <span className="font-mono">{card.key}</span>
+              <span className="font-mono max-md:hidden">{card.key}</span>
             </Link>
           )}
         </nav>
-        <Presence people={present} />
-        <SaveStatus status={save.status} />
+        <Presence people={present} max={narrow ? 2 : MAX_FACES} />
+        <SaveStatus status={save.status} short={narrow} />
         {showToc && !tocColumn && (
           <Popover
             placement="bottom-end"
@@ -308,7 +336,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             )}
           </span>
         </IconButton>
-        {resolvedThreads > 0 && (
+        {resolvedThreads > 0 && !narrow && (
           <IconButton
             label={showResolved ? 'Hide resolved comments' : `Show resolved comments (${resolvedThreads})`}
             active={showResolved}
@@ -321,9 +349,11 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
             <MessageSquareCheck size="0.9375rem" />
           </IconButton>
         )}
-        <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
-          <History size="0.9375rem" />
-        </IconButton>
+        {!narrow && (
+          <IconButton label="Version history" onClick={() => setHistoryOpen(true)}>
+            <History size="0.9375rem" />
+          </IconButton>
+        )}
         <Popover
           placement="bottom-end"
           trigger={(props) => (
@@ -333,6 +363,26 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
           )}
         >
           <Menu>
+            {narrow && (
+              <>
+                <MenuItem icon={<History size="0.875rem" />} onSelect={() => setHistoryOpen(true)}>
+                  Version history
+                </MenuItem>
+                {resolvedThreads > 0 && (
+                  <MenuItem
+                    icon={<MessageSquareCheck size="0.875rem" />}
+                    selected={showResolved}
+                    onSelect={() => {
+                      setShowResolved(!showResolved);
+                      if (!showResolved) reveal();
+                    }}
+                  >
+                    Show resolved comments ({resolvedThreads})
+                  </MenuItem>
+                )}
+                <MenuSeparator />
+              </>
+            )}
             <MenuItem icon={<Copy size="0.875rem" />} onSelect={() => navigate(ws(`/d/${duplicate(pages, page)}`))}>
               Duplicate
             </MenuItem>
@@ -399,7 +449,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
       )}
 
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="relative flex justify-center gap-10 px-6 sm:px-12">
+        <div className="relative flex justify-center gap-10 px-4 md:px-12">
           {tocColumn && (
             <nav
               aria-label="Table of contents"
@@ -409,7 +459,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
               <Outline entries={toc} activeId={activeHeading} onSelect={goToHeading} />
             </nav>
           )}
-          <article className="w-full max-w-180 min-w-0 pt-12 pb-4">
+          <article className="w-full max-w-180 min-w-0 pt-8 pb-4 md:pt-12">
             <div className="group/head">
               {page.icon ? (
                 <IconPicker
@@ -446,7 +496,7 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
                 }}
                 placeholder="Untitled"
                 aria-label="Title"
-                className="field-sizing-content w-full resize-none bg-transparent text-4xl leading-tight font-bold tracking-tight text-fg outline-none placeholder:text-fg-faint"
+                className="field-sizing-content w-full resize-none bg-transparent text-3xl leading-tight font-bold tracking-tight text-fg outline-none placeholder:text-fg-faint md:text-4xl"
               />
             </div>
 
@@ -490,9 +540,25 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
         </div>
       </div>
 
-      {!wide && commentsOpen && (
+      {/* Narrow page: a right-hand overlay; on a phone a full-screen modal sheet (like the card dialog). */}
+      {!wide && commentsOpen && narrow && (
+        <Dialog open fullScreen onClose={() => setCommentsOpen(false)} labelledBy="doc-comments-title" className="pb-[env(safe-area-inset-bottom)]">
+          <div className="flex h-11 shrink-0 items-center gap-2 pr-2 pl-4">
+            <h2 id="doc-comments-title" className="min-w-0 flex-1 truncate text-base font-semibold">
+              Comments
+            </h2>
+            <IconButton label="Close comments" onClick={() => setCommentsOpen(false)}>
+              <X size="0.9375rem" />
+            </IconButton>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+            <CommentsPanel {...panelProps} aligned={false} />
+          </div>
+        </Dialog>
+      )}
+      {!wide && commentsOpen && !narrow && (
         <div className="absolute inset-y-0 right-0 z-30 flex w-80 max-w-full flex-col border-l border-line bg-bg shadow-popover">
-          <div className="flex h-11 shrink-0 items-center justify-end px-2">
+          <div className="flex h-11 shrink-0 items-center justify-end gap-2 px-2">
             <IconButton label="Close comments" onClick={() => setCommentsOpen(false)}>
               <ChevronRight size="0.9375rem" />
             </IconButton>
@@ -508,9 +574,9 @@ function PageView({ page, pages }: { page: Page; pages: Page[] }) {
   );
 }
 
-function SaveStatus({ status }: { status: ReturnType<typeof useAutosave>['status'] }) {
+function SaveStatus({ status, short }: { status: ReturnType<typeof useAutosave>['status']; short?: boolean }) {
   if (status === 'idle') return null;
-  const label = { saving: 'Saving…', saved: 'Saved', offline: 'Offline · kept on this device', error: "Couldn't save" }[status];
+  const label = { saving: 'Saving…', saved: 'Saved', offline: short ? 'Offline' : 'Offline · kept on this device', error: "Couldn't save" }[status];
   return (
     <span
       className={cx('shrink-0 truncate px-1 text-sm', status === 'error' ? 'text-danger' : status === 'offline' ? 'text-warning' : 'text-fg-faint')}
@@ -524,10 +590,10 @@ function SaveStatus({ status }: { status: ReturnType<typeof useAutosave>['status
 const MAX_FACES = 4;
 
 /** Avatars of the other people on this page; editors get an accent ring and dot. */
-function Presence({ people }: { people: PagePresence[] }) {
+function Presence({ people, max = MAX_FACES }: { people: PagePresence[]; max?: number }) {
   if (people.length === 0) return null;
-  const shown = people.slice(0, MAX_FACES);
-  const rest = people.slice(MAX_FACES);
+  const shown = people.slice(0, max);
+  const rest = people.slice(max);
   return (
     <div className="flex shrink-0 items-center -space-x-1 px-1">
       {shown.map((p) => {

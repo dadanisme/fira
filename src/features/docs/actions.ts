@@ -1,6 +1,7 @@
 import type { Page } from '@shared/types';
 import { byRank, rankAfterLast, rankBetween } from '@shared/rank';
-import { createPage, createPageFromTemplate, duplicatePage, savePageVersioned } from '../../data/pages';
+import { createPage, createPageFromTemplate, duplicatePage, savePageVersioned, updatePageMeta } from '../../data/pages';
+import { childrenMap } from './tree';
 
 function siblings(pages: readonly Page[], parentId: string | null, isTemplate: boolean): Page[] {
   return pages.filter((p) => !p.trashed && p.parentId === parentId && p.isTemplate === isTemplate).sort(byRank);
@@ -39,4 +40,13 @@ export async function renamePage(page: Page, title: string): Promise<void> {
     base = res.current;
   }
   throw new Error('Page changed too often to rename; try again.');
+}
+
+/**
+ * "Move to…": `page` goes under `parentId` (null = top level) of its section, last among its
+ * children. The same write as the tree's drag-reparent (parentId + rank).
+ */
+export function movePage(page: Page, pages: readonly Page[], parentId: string | null): void {
+  const siblings = (childrenMap(pages, page.isTemplate).get(parentId) ?? []).filter((p) => p.id !== page.id);
+  updatePageMeta(page.id, { parentId, rank: rankAfterLast(siblings) }).catch(reportError);
 }

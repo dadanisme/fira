@@ -16,7 +16,7 @@ export function Outline({ entries, activeId, onSelect }: { entries: OutlineHeadi
               aria-current={active ? 'location' : undefined}
               onClick={() => onSelect(h.id)}
               className={cx(
-                '-ml-px flex min-w-0 flex-1 items-center gap-1 border-l-2 py-1 pr-1 text-left leading-snug transition-colors hover:text-fg',
+                '-ml-px flex min-w-0 flex-1 items-center gap-1 border-l-2 py-1 pr-1 text-left leading-snug touch:py-2.5 transition-colors hover:text-fg',
                 active ? 'border-accent text-fg' : 'border-transparent text-fg-muted',
               )}
               style={{ paddingLeft: `${0.625 + (h.level - top) * 0.75}rem` }}

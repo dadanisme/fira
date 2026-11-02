@@ -1,13 +1,16 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
+import type { EditorState } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
-import { isTextSelection } from '@tiptap/core';
+import { isTextSelection, posToDOMRect } from '@tiptap/core';
 import {
   Bold,
   Code,
+  ExternalLink,
   Italic,
   Link2,
+  Pencil,
   MessageSquarePlus,
   Strikethrough,
   Trash2,
@@ -18,6 +21,8 @@ import {
   Columns3,
 } from 'lucide-react';
 import { cx } from '../../lib/cx';
+import { NO_HOVER, useMediaQuery } from '../../lib/useMediaQuery';
+import { clearLinkTap, LINK_BUBBLE, linkTapKey, type LinkTap } from './linkTaps';
 
 function ToolButton({ label, active, onClick, children }: { label: string; active?: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -28,7 +33,7 @@ function ToolButton({ label, active, onClick, children }: { label: string; activ
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cx(
-        'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg',
+        'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1.5 text-sm text-fg-muted hover:bg-hover hover:text-fg touch:h-9 touch:min-w-9',
         active && 'bg-active text-fg',
       )}
     >
@@ -38,6 +43,56 @@ function ToolButton({ label, active, onClick, children }: { label: string; activ
 }
 
 const Divider = () => <span className="mx-0.5 h-4 w-px bg-line" />;
+
+/** A typed link target as stored: schemes, root-relative paths and anchors as written, else https. */
+function normalizeHref(url: string): string {
+  return /^[a-z][\w+.-]*:|^\/|^#/i.test(url) ? url : `https://${url}`;
+}
+
+/** The URL field of the link bubbles. Fits a 360px phone (the bubble is max-content wide). */
+function LinkForm({
+  href,
+  onHref,
+  onSubmit,
+  onCancel,
+  onRemove,
+}: {
+  href: string;
+  onHref(href: string): void;
+  onSubmit(): void;
+  onCancel(): void;
+  onRemove?: () => void;
+}) {
+  return (
+    <form
+      className="flex items-center gap-1 p-0.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+    >
+      <input
+        autoFocus
+        value={href}
+        onChange={(e) => onHref(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        placeholder="Paste a link…"
+        inputMode="url"
+        className="h-6 w-56 max-w-[calc(100vw-5.5rem)] rounded bg-transparent px-1.5 text-sm text-fg outline-none placeholder:text-fg-faint"
+      />
+      {onRemove && (
+        <ToolButton label="Remove link" onClick={onRemove}>
+          <Unlink size="0.875rem" />
+        </ToolButton>
+      )}
+    </form>
+  );
+}
 
 /** Formatting bubble on a text selection: bold, italic, strike, code, link, comment. */
 export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?: () => void }) {
@@ -55,10 +110,13 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
     }),
   });
 
+  // On touch the native selection callout (iOS) sits above the selection, so the bubble goes below.
+  const touch = useMediaQuery(NO_HOVER);
+
   const applyLink = () => {
     const url = href.trim();
     const chain = editor.chain().focus().extendMarkRange('link');
-    if (url) chain.setLink({ href: /^[a-z][\w+.-]*:|^\/|^#/i.test(url) ? url : `https://${url}` }).run();
+    if (url) chain.setLink({ href: normalizeHref(url) }).run();
     else chain.unsetLink().run();
     setLinking(false);
   };
@@ -67,7 +125,7 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
     <BubbleMenu
       editor={editor}
       pluginKey="formatBubble"
-      options={{ placement: 'top', offset: 6 }}
+      options={{ placement: touch ? 'bottom' : 'top', offset: touch ? 12 : 6 }}
       shouldShow={({ editor: e, state: s, from, to, view, element }) => {
         if (!view.hasFocus() && !element.contains(document.activeElement)) return false;
         if (!isTextSelection(s.selection) || from === to || e.isActive('codeBlock')) return false;
@@ -76,33 +134,16 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
       className="z-40 flex items-center gap-0.5 rounded-lg bg-surface p-0.5 shadow-popover"
     >
       {linking ? (
-        <form
-          className="flex items-center gap-1 p-0.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyLink();
+        <LinkForm
+          href={href}
+          onHref={setHref}
+          onSubmit={applyLink}
+          onCancel={() => {
+            setLinking(false);
+            editor.commands.focus();
           }}
-        >
-          <input
-            autoFocus
-            value={href}
-            onChange={(e) => setHref(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                setLinking(false);
-                editor.commands.focus();
-              }
-            }}
-            placeholder="Paste a link…"
-            className="h-6 w-56 rounded bg-transparent px-1.5 text-sm text-fg outline-none placeholder:text-fg-faint"
-          />
-          {state.link && (
-            <ToolButton label="Remove link" onClick={() => (setHref(''), editor.chain().focus().extendMarkRange('link').unsetLink().run(), setLinking(false))}>
-              <Unlink size="0.875rem" />
-            </ToolButton>
-          )}
-        </form>
+          onRemove={state.link ? () => (setHref(''), editor.chain().focus().extendMarkRange('link').unsetLink().run(), setLinking(false)) : undefined}
+        />
       ) : (
         <>
           <ToolButton label="Bold" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
@@ -138,6 +179,87 @@ export function FormatBubble({ editor, onComment }: { editor: Editor; onComment?
           )}
         </>
       )}
+    </BubbleMenu>
+  );
+}
+
+/**
+ * Touch only: actions for the link or card chip the caret was tapped into (see linkTaps.ts), below
+ * it so the native callout doesn't cover it. Open / Edit / Remove for links, Open for card chips.
+ */
+const LINK_BUBBLE_OPTIONS = { placement: 'bottom', offset: 10 } as const;
+const showLinkBubble = ({ state }: { state: EditorState }) => !!linkTapKey.getState(state) && state.selection.empty;
+
+export function LinkBubble({ editor, onOpen }: { editor: Editor; onOpen: (tap: LinkTap) => void }) {
+  const tap = useEditorState({ editor, selector: ({ editor: e }) => linkTapKey.getState(e.state) ?? null });
+  /** The tapped link being edited (by its start), so another tap leaves edit mode. */
+  const [editingAt, setEditingAt] = useState<number | null>(null);
+  const [href, setHref] = useState('');
+  const editing = tap !== null && editingAt === tap.from;
+
+  // Stable props: the BubbleMenu dispatches an options update whenever one changes identity.
+  const anchor = useCallback(() => {
+    const t = linkTapKey.getState(editor.state);
+    return t ? { getBoundingClientRect: () => posToDOMRect(editor.view, t.from, t.to) } : null;
+  }, [editor]);
+
+  const relink = (t: LinkTap, url: string) => {
+    const chain = editor.chain().focus().setTextSelection({ from: t.from, to: t.to });
+    (url ? chain.setLink({ href: normalizeHref(url) }) : chain.unsetLink()).setTextSelection(t.to).run();
+    setEditingAt(null);
+  };
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      pluginKey={LINK_BUBBLE}
+      updateDelay={0}
+      options={LINK_BUBBLE_OPTIONS}
+      getReferencedVirtualElement={anchor}
+      shouldShow={showLinkBubble}
+      className="z-40 flex max-w-[calc(100vw-1rem)] items-center gap-0.5 rounded-lg bg-surface p-0.5 shadow-popover"
+    >
+      {tap &&
+        (editing ? (
+          <LinkForm
+            href={href}
+            onHref={setHref}
+            onSubmit={() => relink(tap, href.trim())}
+            onCancel={() => setEditingAt(null)}
+            onRemove={() => relink(tap, '')}
+          />
+        ) : (
+          <>
+            <ToolButton
+              label={tap.cardKey ? `Open ${tap.cardKey}` : `Open ${tap.href}`}
+              onClick={() => {
+                clearLinkTap(editor.view);
+                onOpen(tap);
+              }}
+            >
+              <ExternalLink size="0.875rem" />
+              <span className="max-w-40 truncate">{tap.cardKey ? `Open ${tap.cardKey}` : 'Open'}</span>
+            </ToolButton>
+            {!tap.cardKey && (
+              <>
+                <ToolButton
+                  label="Edit link"
+                  onClick={() => {
+                    setHref(tap.href);
+                    setEditingAt(tap.from);
+                  }}
+                >
+                  <Pencil size="0.875rem" />
+                  <span>Edit</span>
+                </ToolButton>
+                <ToolButton label="Remove link" onClick={() => relink(tap, '')}>
+                  <Unlink size="0.875rem" />
+                  <span>Remove</span>
+                </ToolButton>
+              </>
+            )}
+          </>
+        ))}
     </BubbleMenu>
   );
 }

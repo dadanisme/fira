@@ -11,6 +11,8 @@ import type { MarkdownEditorProps, OutlineHeading } from '../MarkdownEditor';
 import { uploadErrorMessage } from '../../data/uploads';
 import { inAppPath } from './appLinks';
 import { CardMentions } from './cardMentions';
+import { SAFE_URL } from './linkClicks';
+import { LinkTaps, tapsShowLinkBubble, type LinkTap } from './linkTaps';
 import { CommentHighlights, commentHighlightsKey, setCommentHighlights } from './commentHighlights';
 import { HeadingFolds, revealHeading, revealPos } from './headingFolds';
 import { schemaExtensions } from './schema';
@@ -18,7 +20,7 @@ import { SlashCommand } from './slashCommand';
 import { SlashMenu } from './SlashMenu';
 import { applyExternal } from './applyExternal';
 import { anchorForRange, buildTextIndex } from './textIndex';
-import { FormatBubble, TableBubble } from './Toolbars';
+import { FormatBubble, LinkBubble, TableBubble } from './Toolbars';
 import './markdown.css';
 
 function imageFiles(list: FileList | null | undefined): File[] {
@@ -77,6 +79,8 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
           editor.isEmpty ? (latest.current.placeholder ?? (isPage ? "Write, or type '/' for commands…" : '')) : node.type.name === 'paragraph' && isPage ? "Type '/' for commands" : '',
         showOnlyCurrent: true,
       }),
+      // Runs before CardMentions' and firaKeys' click handlers (priority), which swallow link/chip clicks.
+      LinkTaps,
       CardMentions.configure({ open: (href) => void navigateRef.current(href) }),
       CommentHighlights.configure({
         onClick: (id) => latest.current.onCommentClick?.(id),
@@ -116,9 +120,10 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
             props: {
               // In-app links (pages, cards, workspace-relative ones resolved in this workspace):
               // a click navigates in place, Mod-click opens a new tab, Alt-click edits.
-              // External links are opened by LinkClicks (schema).
+              // External links are opened by LinkClicks (schema). On touch a tap places the caret
+              // and LinkTaps shows the link bubble instead.
               handleClick: (view, _pos, event) => {
-                if (event.button !== 0 || event.altKey) return false;
+                if (event.button !== 0 || event.altKey || tapsShowLinkBubble(view, event)) return false;
                 const a = (event.target as HTMLElement | null)?.closest?.('a[href]');
                 if (!(a instanceof HTMLAnchorElement) || a.dataset.cardKey || !view.dom.contains(a)) return false;
                 const path = inAppPath(a.getAttribute('href'));
@@ -227,6 +232,12 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const pickImage = useMemo(() => (uploadImage ? () => fileInput.current?.click() : undefined), [uploadImage]);
 
+  const openTap = useCallback((tap: LinkTap) => {
+    const path = tap.cardKey ? (tap.href === '#' ? null : tap.href) : inAppPath(tap.href);
+    if (path !== null) void navigateRef.current(path);
+    else if (SAFE_URL.test(tap.href.trim())) window.open(tap.url, '_blank', 'noopener,noreferrer');
+  }, []);
+
   const comment = onComment
     ? () => {
         const { from, to } = editor.state.selection;
@@ -241,6 +252,7 @@ export default function MarkdownEditorImpl(props: MarkdownEditorProps) {
     <div className={cx('relative', className)}>
       <EditorContent editor={editor} />
       <FormatBubble editor={editor} onComment={comment} />
+      <LinkBubble editor={editor} onOpen={openTap} />
       {isPage && <TableBubble editor={editor} />}
       {isPage && <SlashMenu editor={editor} keyHandler={slashKeys} pickImage={pickImage} />}
       {uploadImage && (

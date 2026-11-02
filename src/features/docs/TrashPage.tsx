@@ -34,7 +34,7 @@ export default function TrashPage() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-180 px-6 pt-12 pb-8">
+      <div className="mx-auto max-w-180 px-4 pt-8 pb-8 md:px-6 md:pt-12">
         <h1 className="mb-1 flex items-center gap-2 text-2xl font-bold tracking-tight">
           <Trash2 size="1.25rem" className="text-fg-faint" />
           Trash
@@ -45,7 +45,7 @@ export default function TrashPage() {
           {roots.map((page) => {
             const n = subpages(page.id);
             return (
-              <li key={page.id} className="flex min-h-11 items-center gap-3 py-1.5">
+              <li key={page.id} className="flex min-h-11 items-center gap-3 py-1.5 max-md:flex-wrap max-md:gap-y-1 max-md:py-2.5">
                 <span className="flex w-5 justify-center text-fg-faint">
                   {page.icon ?? (page.isTemplate ? <LayoutTemplate size="0.9375rem" /> : <FileText size="0.9375rem" />)}
                 </span>
@@ -58,18 +58,21 @@ export default function TrashPage() {
                     {n > 0 && ` · ${n} subpage${n === 1 ? '' : 's'}`}
                   </div>
                 </div>
-                <Button size="sm" icon={<RotateCcw size="0.8125rem" />} onClick={() => restorePage(page, pages).catch(reportError)}>
-                  Restore
-                </Button>
-                <ConfirmButton
-                  size="sm"
-                  variant="ghost"
-                  question="Delete permanently?"
-                  confirmLabel="Delete"
-                  onConfirm={() => deletePageForever(page, pages).catch(reportError)}
-                >
-                  Delete forever
-                </ConfirmButton>
+                {/* On a phone the actions take their own row under the title. */}
+                <div className="flex shrink-0 items-center gap-3 max-md:w-full max-md:gap-2 max-md:pl-8">
+                  <Button size="sm" icon={<RotateCcw size="0.8125rem" />} onClick={() => restorePage(page, pages).catch(reportError)}>
+                    Restore
+                  </Button>
+                  <ConfirmButton
+                    size="sm"
+                    variant="ghost"
+                    question="Delete permanently?"
+                    confirmLabel="Delete"
+                    onConfirm={() => deletePageForever(page, pages).catch(reportError)}
+                  >
+                    Delete forever
+                  </ConfirmButton>
+                </div>
               </li>
             );
           })}

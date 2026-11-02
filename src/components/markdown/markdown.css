@@ -206,6 +206,29 @@
   min-width: 4em;
   position: relative;
 }
+/*
+ * Phones (below md): columns keep a readable width and a wide table scrolls inside .tableWrapper
+ * (code blocks scroll in their <pre>, images shrink to fit) instead of widening the page.
+ */
+@media (max-width: 47.999rem) {
+  .md .tableWrapper {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .md table {
+    table-layout: auto;
+  }
+  .md th,
+  .md td {
+    min-width: 7em;
+  }
+  .md pre {
+    overscroll-behavior-x: contain;
+  }
+  .md :is(iframe, video, embed, object) {
+    max-width: 100%;
+  }
+}
 .md th {
   background: var(--sunken);
   font-weight: 600;
@@ -306,6 +329,13 @@
 @media (hover: none) {
   .md .md-foldable:not(.is-folded)::before {
     opacity: 0.6;
+  }
+  /* A larger (invisible) hit box around the same chevron, centered where it was; the mask keeps its size. */
+  .md .md-foldable:not(.is-empty)::before {
+    left: -1.8125rem;
+    top: calc((1lh - 2rem) / 2);
+    width: 2rem;
+    height: 2rem;
   }
 }
 .md .md-foldable.is-folded::after {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import type { Page } from '@shared/types';
 import { restoreVersion, useVersions } from '../../data/pages';
 import { Avatar } from '../../components/Avatar';
@@ -10,11 +10,16 @@ import { cx } from '../../lib/cx';
 import { pageTitle } from './actions';
 import { dateTime, timeAgo } from './format';
 
-/** Version history: list of snapshots, rendered preview, restore (saved as a new version). */
+/**
+ * Version history: list of snapshots, rendered preview, restore (saved as a new version).
+ * On a phone (below md) a full-screen sheet showing the list, then the picked version's preview.
+ */
 export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; onClose(): void; onBeforeRestore(): void }) {
   const { data: versions, loading } = useVersions(page.id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = versions.find((v) => v.id === selectedId) ?? versions[0];
+  /** Phone only: the preview replaces the list once a version is picked. */
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -25,11 +30,17 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-sunken/60" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-230 bg-bg shadow-popover">
-        <div className="flex w-64 shrink-0 flex-col border-r border-line bg-sidebar">
+      <div
+        role="dialog"
+        aria-label="Version history"
+        className="relative flex h-full w-full max-w-230 bg-bg pb-[env(safe-area-inset-bottom)] shadow-popover"
+      >
+        <div
+          className={cx('flex w-64 shrink-0 flex-col border-r border-line bg-sidebar max-md:w-full max-md:border-r-0', previewing && 'max-md:hidden')}
+        >
           <div className="flex h-11 items-center justify-between px-3">
             <span className="text-base font-semibold">Version history</span>
-            <IconButton label="Close" onClick={onClose} className="sm:hidden">
+            <IconButton label="Close" onClick={onClose} className="md:hidden">
               <X size="0.9375rem" />
             </IconButton>
           </div>
@@ -39,9 +50,12 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
               <button
                 key={v.id}
                 type="button"
-                onClick={() => setSelectedId(v.id)}
+                onClick={() => {
+                  setSelectedId(v.id);
+                  setPreviewing(true);
+                }}
                 className={cx(
-                  'flex flex-col gap-0.5 rounded-md px-2 py-1.5 text-left',
+                  'flex shrink-0 flex-col gap-0.5 rounded-md px-2 py-1.5 text-left max-md:py-2.5',
                   v.id === selected?.id ? 'bg-active' : 'hover:bg-hover',
                 )}
               >
@@ -55,8 +69,11 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
             ))}
           </div>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
+        <div className={cx('flex min-w-0 flex-1 flex-col', !previewing && 'max-md:hidden')}>
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 max-md:pr-2 max-md:pl-2">
+            <IconButton label="All versions" onClick={() => setPreviewing(false)} className="md:hidden">
+              <ChevronLeft size="0.9375rem" />
+            </IconButton>
             <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
               {selected && `${dateTime(selected.savedAt)} · ${selected.actor.name}${selected.actor.type === 'token' ? ' (API)' : ''}`}
             </span>
@@ -70,14 +87,15 @@ export function HistoryDrawer({ page, onClose, onBeforeRestore }: { page: Page; 
                   onClose();
                 }}
               >
-                Restore this version
+                <span className="max-md:hidden">Restore this version</span>
+                <span className="md:hidden">Restore</span>
               </Button>
             )}
             <IconButton label="Close" onClick={onClose}>
               <X size="0.9375rem" />
             </IconButton>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-10 md:py-8">
             {selected && (
               <div className="mx-auto max-w-180">
                 <h1 className="mb-4 text-3xl leading-tight font-bold tracking-tight">{pageTitle(selected)}</h1>
